@@ -61,6 +61,7 @@ class RstegTcpServer:
         self.payload = b''  # Binary data recv
         self.rsteg_trigger = True  # Flag for rsteg mechanism
         self.rsteg_wait = False  # Flag that marks if we're waiting the secret
+        self.window_size = None
 
     def handle_packet(self, pkt):
         """Reads the TCP flag from the packet in order to choose the function that handles it (according to the state).
@@ -190,7 +191,7 @@ if __name__ == '__main__':
     logger.setLevel(logging.DEBUG)
 
     # Config params
-    SPORT = 9007
+    SPORT = 80
 
     server = RstegTcpServer(SPORT)
 

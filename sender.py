@@ -9,6 +9,7 @@ for the selected SPORT:
 """
 
 from scapy.all import *
+from scapy.layers.http import HTTP, HTTPRequest
 from scapy.layers.inet import IP, TCP
 import logging
 
@@ -41,6 +42,7 @@ class RstegTcpClient:
         self.timeout = 3  # Timeout window for retransmission (in seconds)
         self.secret_payload = secret  # Steganogram
         self.secret_sent = False  # Flag for secret delivered
+        self.window_size = None
 
     def acknowledge(self, pkt):
         """Crafts and sends the ACK for the parameter-supplied packet.
@@ -69,6 +71,8 @@ class RstegTcpClient:
         # Update ACK and SEQ fields
         self.ack = syn_ack[TCP].seq + 1
         self.seq = syn_ack[TCP].ack
+        # Get Window Size
+        self.window_size = syn_ack[TCP].window
         # Craft ACK for the SYN_ACK and send it
         ack = self.ip / TCP(sport=self.sport, dport=self.dport, seq=self.seq, flags='A', ack=self.ack)
         send(ack)
@@ -99,7 +103,7 @@ class RstegTcpClient:
         :param payload: Content for the tcp payload
         :return: Returns the crafted Scapy IP/TCP package.
         """
-        psh = self.ip / TCP(sport=self.sport, dport=self.dport, flags='PA', seq=self.seq, ack=self.ack) / payload
+        psh = self.ip / TCP(sport=self.sport, dport=self.dport, flags='PA', seq=self.seq, ack=self.ack) / Raw(load = payload)
         return psh
 
     def build_secret(self):
@@ -159,18 +163,27 @@ if __name__ == '__main__':
 
     # Config params
     DHOST = 'XXX.XXX.XXX.XXX'  # server IP
-    DPORT = 9007  # server port
-    SPORT = 1338  # local port
+    DPORT = 80  # server port
+    SPORT = 80  # local port
     FILENAME = 'test.jpg'  # data to transmit
     SECRET = 'esteganogram'  # secret
 
     # Read the data and save as a binary
     data = open(FILENAME, 'rb').read()
+
+    # HTTP Post request with data payload
+    header = "POST /test HTTP/1.1\r\n"
+    header += "Host: foo.example\r\n"
+    header += "Content-Type: application/octet-stream\r\n"
+    header += "Content-Length: " + str(len(data)) + "\r\n\n"
+
+    payload = header.encode('utf-8') + data
+
     chunks = []
     interval = 1440  # packet payload length
     # Slice the binary data in chunks the size of the payload length
-    for n in range(0, len(data), interval):
-        chunks.append(data[n:n + interval])
+    for n in range(0, len(payload), interval):
+        chunks.append(payload[n:n + interval])
 
     # Connect to the server, send the payload (+ rsteg the secret) and close connection
     logger.debug('Creating TCP Session at %s:%s', DHOST, DPORT)
@@ -180,3 +193,4 @@ if __name__ == '__main__':
         client.send(chunk)
     client.close()
     logger.debug('TCP Session closed.')
+
