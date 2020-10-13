@@ -197,6 +197,7 @@ if __name__ == '__main__':
 
     # Create a Layer 3 RawSocket from where we'll sniff packets
     socket = L3RawSocket()
+
     while True:
         # Sniff IP datagram
         datagram = socket.recv(MTU)

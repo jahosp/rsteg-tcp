@@ -9,9 +9,10 @@ for the selected SPORT:
 """
 
 from scapy.all import *
-from scapy.layers.http import HTTP, HTTPRequest
 from scapy.layers.inet import IP, TCP
+import PySimpleGUIQt as sg
 import logging
+from utils import is_ipv4
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +53,7 @@ class RstegTcpClient:
         self.ack = pkt[TCP].seq + len(pkt[Raw])
         # Craft the packet and send it
         ack = self.ip / TCP(sport=self.sport, dport=self.dport, flags='A', seq=self.seq, ack=self.ack)
-        send(ack)
+        send(ack, verbose=0)
 
     def connect(self):
         """Performs the TCP 3-way handshake.
@@ -67,7 +68,7 @@ class RstegTcpClient:
         # Craft SYN packet
         syn = self.ip / TCP(sport=self.sport, dport=self.dport, seq=self.seq, flags='S')
         # Send SYN and wait timeout for SYN_ACK
-        syn_ack = sr1(syn, timeout=self.timeout)  # sr1 = send & receive layer 3
+        syn_ack = sr1(syn, timeout=self.timeout, verbose=0)  # sr1 = send & receive layer 3
         # Update ACK and SEQ fields
         self.ack = syn_ack[TCP].seq + 1
         self.seq = syn_ack[TCP].ack
@@ -75,7 +76,7 @@ class RstegTcpClient:
         self.window_size = syn_ack[TCP].window
         # Craft ACK for the SYN_ACK and send it
         ack = self.ip / TCP(sport=self.sport, dport=self.dport, seq=self.seq, flags='A', ack=self.ack)
-        send(ack)
+        send(ack, verbose=0)
         logger.debug('3-way handshake completed')
         # Connection established
         self.connected = True
@@ -86,7 +87,7 @@ class RstegTcpClient:
         # Craft and send the FIN/ACK
         logger.debug('SND -> FIN')
         fin = self.ip / TCP(sport=self.sport, dport=self.dport, flags='FA', seq=self.seq, ack=self.ack)
-        fin_ack = sr1(fin, timeout=self.timeout, retry=5, filter='tcp[tcpflags] & tcp-fin != 0')
+        fin_ack = sr1(fin, timeout=self.timeout, retry=5, filter='tcp[tcpflags] & tcp-fin != 0', verbose=0)
         logger.debug('RCV -> FIN/ACK')
         # Update ACK and SEQ fields
         self.ack = fin_ack[TCP].seq + 1
@@ -94,7 +95,7 @@ class RstegTcpClient:
         # Send final ACK
         ack = self.ip / TCP(sport=self.sport, dport=self.dport, flags='A', seq=self.seq, ack=self.ack)
         logger.debug('SND -> FINAL_ACK')
-        send(ack)
+        send(ack, verbose=0)
 
         logger.debug('Session terminated.')
 
@@ -125,13 +126,13 @@ class RstegTcpClient:
         """
         psh = self.build(payload)
         logger.debug('SND -> PSH')
-        ack = sr1(psh, timeout=1, retry=0)
+        ack = sr1(psh, timeout=1, retry=0, verbose=0)
 
         if ack is None and not self.secret_sent:  # No response and secret not sent yet
             logger.debug('ACK TIMEOUT')
             logger.debug('SND -> SCRT')
             secret_psh = self.build_secret()
-            ack = sr1(secret_psh, timeout=self.timeout)
+            ack = sr1(secret_psh, timeout=self.timeout, verbose=0)
             if ack is not None:  # Response for secret
                 logger.debug('ACK SCRT')
                 self.secret_sent = True
@@ -141,7 +142,7 @@ class RstegTcpClient:
 
         elif ack is None and self.secret_sent:  # No response, secret already sent.
             logger.debug('SND -> PSH | RETRANS')
-            ack = sr1(psh, timeout=2, retry=3)
+            ack = sr1(psh, timeout=2, retry=3, verbose=0)
             if ack is not None:  # ACK for RETRANS
                 logger.debug('RCV -> ACK')
                 self.seq += len(psh[Raw])
@@ -151,25 +152,9 @@ class RstegTcpClient:
             self.seq += len(psh[Raw])
 
 
-# Start point
-if __name__ == '__main__':
-    # Logger configuration
-    logging.basicConfig(filename='sender.log',
-                        filemode='w',
-                        format='%(asctime)s - %(levelname)s - %(message)s',
-                        datefmt='%m/%d/%Y %I:%M:%S %p',
-                        level=logging.DEBUG)
-    logger.setLevel(logging.DEBUG)
-
-    # Config params
-    DHOST = 'XXX.XXX.XXX.XXX'  # server IP
-    DPORT = 80  # server port
-    SPORT = 80  # local port
-    FILENAME = 'test.jpg'  # data to transmit
-    SECRET = 'esteganogram'  # secret
-
+def send_over_http(DHOST, DPORT, SPORT, COVER, SECRET):
     # Read the data and save as a binary
-    data = open(FILENAME, 'rb').read()
+    data = open(COVER, 'rb').read()
 
     # HTTP Post request with data payload
     header = "POST /test HTTP/1.1\r\n"
@@ -187,10 +172,78 @@ if __name__ == '__main__':
 
     # Connect to the server, send the payload (+ rsteg the secret) and close connection
     logger.debug('Creating TCP Session at %s:%s', DHOST, DPORT)
-    client = RstegTcpClient(DHOST, DPORT, SECRET, SPORT)
+    print('Opening TCP Session at ' + DHOST + ':' + SPORT)
+    window.refresh()
+    client = RstegTcpClient(DHOST, int(DPORT), SECRET, int(SPORT))
     client.connect()
+    window.refresh()
+    print('3-way handshake completed.')
+    window.refresh()
     for chunk in chunks:
         client.send(chunk)
+    print('Cover sent as an HTTP POST request.')
+    window.refresh()
     client.close()
     logger.debug('TCP Session closed.')
+    print('TCP Session closed')
+    window.refresh()
+
+
+# Start point
+if __name__ == '__main__':
+    # Logger configuration
+    logging.basicConfig(filename='sender.log',
+                        filemode='w',
+                        format='%(asctime)s - %(levelname)s - %(message)s',
+                        datefmt='%m/%d/%Y %I:%M:%S %p',
+                        level=logging.DEBUG)
+    logger.setLevel(logging.DEBUG)
+
+    # Application Layout
+    sg.theme('Default')
+    layout = [[sg.Text("Please enter the following parameters:")],
+              [sg.Text('Destination Host IP', size=(15, 1)), sg.InputText(enable_events=True, key='dhost')],
+              [sg.Text('Destination Port ', size=(15, 1)), sg.InputText(enable_events=True, key='dport')],
+              [sg.Text('Source Port', size=(15, 1)), sg.InputText(enable_events=True, key='sport')],
+              [sg.Text('Cover data', size=(8, 1)), sg.Input(key='cover'), sg.FileBrowse()],
+              [sg.Text('Secret data', size=(8, 1)), sg.Input(key='secret'), sg.FileBrowse()],
+              [sg.Text('STATUS')],
+              [sg.Output(size=(40, 10), key='-OUTPUT-')],
+              [sg.Button('Submit'), sg.Button('Clear log')]]
+
+    # Create the window
+    window = sg.Window('RSTEG TCP', layout)
+
+    # Window Event Loop
+    while True:
+        event, values = window.read()
+        # Quit event
+        if event == sg.WINDOW_CLOSED:
+            break
+        # Submit form event
+        if event == 'Submit' and values['dhost'] and values['dport'] and values['sport'] \
+                and values['cover'] and values['secret']:
+            # Let's validate the form input
+            if is_ipv4(values['dhost']):
+                if 1 <= int(values['dport']) <= 65535:
+                    if 1 <= int(values['sport']) <= 65535:
+                        print('Parameters are valid!')
+                        print('Starting RSTEG TCP')
+                        window.refresh()
+                        send_over_http(values['dhost'], values['dport'], values['sport'], values['cover'], values['secret'])
+                        sg.popup_ok('Data and secret delivered!', title="Success", line_width=35, keep_on_top=True)
+                    else:
+                        print('Source Port is not valid.')
+                else:
+                    print('Destination Port is not valid.')
+            else:
+                print('Destination Host IP is not valid.')
+
+        # Clear log event
+        if event == 'Clear log':
+            window['-OUTPUT-'].update('')
+
+    # Remove window from screen
+    window.close()
+
 
