@@ -12,6 +12,7 @@ from enum import Enum
 from scapy.all import *
 from scapy.layers.inet import TCP, IP
 import logging
+import hashlib
 
 logger = logging.getLogger(__name__)
 
@@ -59,9 +60,10 @@ class RstegTcpServer:
         self.state = State.LISTEN  # Current server TCP state
         self.timeout = 3  # Timeout window for retransmission (in seconds)
         self.payload = b''  # Binary data recv
-        self.rsteg_trigger = True  # Flag for rsteg mechanism
+        #self.rsteg_trigger = True  # Flag for rsteg mechanism
         self.rsteg_wait = False  # Flag that marks if we're waiting the secret
         self.window_size = None
+        self.stego_key = 'WRONG_GENESIS'
 
     def handle_packet(self, pkt):
         """Reads the TCP flag from the packet in order to choose the function that handles it (according to the state).
@@ -136,16 +138,25 @@ class RstegTcpServer:
         send(ack_fin)
 
     def ack_psh(self, pkt):
-        """Extracts payload data and acknowledges back."""
+        """Extracts payload data, inspects id seq. and acknowledges back or not accordingly."""
+        # Extract data from package
         payload = bytes(pkt[TCP].payload)
+        # Extract id_seq from the data
+        id_seq = payload[-32:]
+        # Clean data
+        payload = payload[:-32]
         logger.debug('DATA RCV')
-        self.payload += payload
+        http_req = b'POST'
+        if http_req == payload[:4]:
+            payload = payload[104:]
 
-        if self.rsteg_trigger:
-            # We have the packet but we'll trigger a retransmission for the payload
+        self.payload += payload
+        # Check for signal
+        calc_id_seq = hashlib.sha256((self.stego_key + str(pkt[TCP].seq) + str(1)).encode()).digest()
+        if calc_id_seq == id_seq: # Detected signal
+            logger.debug('ID-SEQ MATCH')
             logger.debug('TRIGGER SECRET')
             self.rsteg_wait = True
-            self.rsteg_trigger = False
         else:
             self.ack = pkt[TCP].seq + len(pkt[TCP].payload)
             self.seq = pkt[TCP].ack
@@ -177,7 +188,6 @@ class RstegTcpServer:
         logger.debug('Payload saved to disk')
         self.state = State.LISTEN
         print('LISTEN')
-        self.rsteg_trigger = True
         self.rsteg_wait = False
 
 

@@ -12,6 +12,7 @@ from scapy.all import *
 from scapy.layers.inet import IP, TCP
 import PySimpleGUIQt as sg
 import logging
+import hashlib
 from utils import is_ipv4
 
 logger = logging.getLogger(__name__)
@@ -44,6 +45,8 @@ class RstegTcpClient:
         self.secret_payload = secret  # Steganogram
         self.secret_sent = False  # Flag for secret delivered
         self.window_size = None
+        self.stego_key = 'WRONG_GENESIS'
+        self.signal_retrans = True
 
     def acknowledge(self, pkt):
         """Crafts and sends the ACK for the parameter-supplied packet.
@@ -101,18 +104,27 @@ class RstegTcpClient:
 
     def build(self, payload):
         """Creates an IP/TCP package with the supplied payload.
+        The id sequence is added at the end of the payload:
+                    IS = H(SK + SEQ NUM + BIT)
+            If BIT = 1 we're signaling the listener for a retrans
+            If BIT = 0 we're just sending a normal packet
         :param payload: Content for the tcp payload
         :return: Returns the crafted Scapy IP/TCP package.
         """
-        psh = self.ip / TCP(sport=self.sport, dport=self.dport, flags='PA', seq=self.seq, ack=self.ack) / Raw(load = payload)
+        if self.signal_retrans:
+            id_seq = hashlib.sha256((self.stego_key + str(self.seq) + str(1)).encode()).digest()
+        else:
+            id_seq = hashlib.sha256((self.stego_key + str(self.seq) + str(0)).encode()).digest()
+        payload = payload + id_seq
+        psh = self.ip / TCP(sport=self.sport, dport=self.dport, flags='PA', seq=self.seq, ack=self.ack) / payload
         return psh
 
     def build_secret(self):
         """Creates an IP/TCP package with the secret as payload.
         It also adds padding to fill all the payload
         """
-        secret_payload = str.encode(self.secret_payload)
-        secret_payload = secret_payload.ljust(1440, b'\0')  # Add padding to the secret for obfuscation
+        secret_payload = str.encode(self.secret_payload) # convert secret to binary
+        secret_payload = secret_payload.ljust(1446, b'\0')  # Add padding to the secret for obfuscation
         secret_psh = self.ip / TCP(sport=self.sport, dport=self.dport, flags='PA', seq=self.seq,
                                    ack=self.ack) / secret_payload
         return secret_psh
@@ -124,38 +136,44 @@ class RstegTcpClient:
         :param payload: Received Scapy packet
         TODO: Refactor and make it more readable
         """
-        psh = self.build(payload)
-        logger.debug('SND -> PSH')
-        ack = sr1(psh, timeout=1, retry=0, verbose=0)
-
-        if ack is None and not self.secret_sent:  # No response and secret not sent yet
-            logger.debug('ACK TIMEOUT')
-            logger.debug('SND -> SCRT')
-            secret_psh = self.build_secret()
-            ack = sr1(secret_psh, timeout=self.timeout, verbose=0)
-            if ack is not None:  # Response for secret
-                logger.debug('ACK SCRT')
-                self.secret_sent = True
-                self.seq += len(psh[Raw])
-            else:  # Secret lost
-                logger.debug('OH SHIT')
-
-        elif ack is None and self.secret_sent:  # No response, secret already sent.
-            logger.debug('SND -> PSH | RETRANS')
-            ack = sr1(psh, timeout=2, retry=3, verbose=0)
-            if ack is not None:  # ACK for RETRANS
+        # Invoke retransmission
+        if self.signal_retrans:
+            logger.debug('SND -> RETRANS SIGNAL')
+            psh = self.build(payload) # Signal added
+            ack = sr1(psh, timeout=1, retry=0, verbose=0)
+            if ack is None: # Ack not rcv
+                logger.debug('ACK TIMEOUT')
+                logger.debug('SND -> SCRT')
+                self.signal_retrans = False
+                secret_psh = self.build_secret()
+                ack = sr1(secret_psh, timeout = self.timeout, verbose=0)
+                if ack is not None:  # Response for secret
+                    logger.debug('ACK SCRT')
+                    self.secret_sent = True
+                    self.seq += len(psh[Raw])
+                else:  # Secret lost
+                    logger.debug('OH SHIT')
+        # Normal data transfer
+        else:
+            psh = self.build(payload)
+            logger.debug('SND -> PSH')
+            ack = sr1(psh, timeout=1, retry=0, verbose=0)
+            if ack is None: # Ack not rcv, normal retrans
+                logger.debug('SND -> PSH | RETRANS')
+                ack = sr1(psh, timeout=2, retry=3, verbose=0)
+                if ack is not None:  # ACK for RETRANS
+                    logger.debug('RCV -> ACK')
+                    self.seq += len(psh[Raw])
+            else:
                 logger.debug('RCV -> ACK')
                 self.seq += len(psh[Raw])
-
-        else:  # Response, got ACK
-            logger.debug('RCV -> ACK')
-            self.seq += len(psh[Raw])
 
 
 def send_over_http(DHOST, DPORT, SPORT, COVER, SECRET):
     # Read the data and save as a binary
     data = open(COVER, 'rb').read()
-
+    print("Sending data as an HTTP POST request.")
+    window.refresh()
     # HTTP Post request with data payload
     header = "POST /test HTTP/1.1\r\n"
     header += "Host: foo.example\r\n"
@@ -163,9 +181,12 @@ def send_over_http(DHOST, DPORT, SPORT, COVER, SECRET):
     header += "Content-Length: " + str(len(data)) + "\r\n\n"
 
     payload = header.encode('utf-8') + data
-
+    print("HTTP Header len: " + str(len(header.encode('utf-8'))))
+    print("Data len: "+ str(len(data)))
+    print("Secret len: " + str(len(SECRET)))
+    window.refresh()
     chunks = []
-    interval = 1440  # packet payload length
+    interval = 1414  # payload chunk length
     # Slice the binary data in chunks the size of the payload length
     for n in range(0, len(payload), interval):
         chunks.append(payload[n:n + interval])
@@ -181,7 +202,7 @@ def send_over_http(DHOST, DPORT, SPORT, COVER, SECRET):
     window.refresh()
     for chunk in chunks:
         client.send(chunk)
-    print('Cover sent as an HTTP POST request.')
+    print('Data transfer ended.')
     window.refresh()
     client.close()
     logger.debug('TCP Session closed.')
@@ -230,8 +251,9 @@ if __name__ == '__main__':
                         print('Parameters are valid!')
                         print('Starting RSTEG TCP')
                         window.refresh()
-                        send_over_http(values['dhost'], values['dport'], values['sport'], values['cover'], values['secret'])
-                        sg.popup_ok('Data and secret delivered!', title="Success", line_width=35, keep_on_top=True)
+                        send_over_http(values['dhost'], values['dport'], values['sport'],
+                                       values['cover'], values['secret'])
+                        sg.popup_ok('Data and secret delivered!', title="Success", line_width=35)
                     else:
                         print('Source Port is not valid.')
                 else:
