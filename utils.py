@@ -3,6 +3,7 @@
 # Author: jahos@protonmail.com
 
 import ipaddress
+import random
 
 
 def is_ipv4(string):
@@ -12,3 +13,7 @@ def is_ipv4(string):
         return True
     except ValueError:
         return False
+
+
+def retrans_prob(prob):
+    return random.random() < prob

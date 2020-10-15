@@ -10,10 +10,11 @@ for the selected SPORT:
 
 from scapy.all import *
 from scapy.layers.inet import IP, TCP
+from utils import is_ipv4, retrans_prob
 import PySimpleGUIQt as sg
 import logging
 import hashlib
-from utils import is_ipv4
+
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +47,7 @@ class RstegTcpClient:
         self.secret_sent = False  # Flag for secret delivered
         self.window_size = None
         self.stego_key = 'WRONG_GENESIS'
-        self.signal_retrans = True
+        self.signal_retrans = False
 
     def acknowledge(self, pkt):
         """Crafts and sends the ACK for the parameter-supplied packet.
@@ -168,6 +169,7 @@ class RstegTcpClient:
                 logger.debug('RCV -> ACK')
                 self.seq += len(psh[Raw])
 
+        self.signal_retrans = retrans_prob(0.2)
 
 def send_over_http(DHOST, DPORT, SPORT, COVER, SECRET):
     # Read the data and save as a binary
