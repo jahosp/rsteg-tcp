@@ -63,7 +63,7 @@ class RstegTcpServer:
         self.rsteg_wait = False  # Flag that marks if we're waiting the secret
         self.window_size = None
         self.artificial_loss = False
-        self.loss_prob = 0.1
+        self.loss_prob = 0.07
         self.stego_key = 'WRONG_GENESIS'
 
     def handle_packet(self, pkt):
@@ -212,7 +212,7 @@ if __name__ == '__main__':
     SPORT = 80
 
     server = RstegTcpServer(SPORT)
-    print('Created server on PORT ' + str(SPORT))
+    print('Created TCP server on PORT ' + str(SPORT))
     # Create a Layer 3 RawSocket from where we'll sniff packets
     socket = L3RawSocket()
 

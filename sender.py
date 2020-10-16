@@ -14,6 +14,7 @@ from utils import is_ipv4, retrans_prob
 import PySimpleGUIQt as sg
 import logging
 import hashlib
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +48,7 @@ class RstegTcpClient:
         self.window_size = None
         self.stego_key = 'WRONG_GENESIS'
         self.signal_retrans = False
-        self.retrans_prob = 0
+        self.retrans_prob = 0.3
 
     def acknowledge(self, pkt):
         """Crafts and sends the ACK for the parameter-supplied packet.
@@ -154,6 +155,9 @@ class RstegTcpClient:
                     self.seq += len(psh[Raw])
                 else:  # Secret lost
                     logger.debug('OH SHIT')
+                    psh = self.build(payload)
+                    logger.debug('EDGE CASE')
+                    ack = sr1(psh, timeout=1, retry=0, verbose=0)
         # Normal data transfer
         else:
             psh = self.build(payload)
@@ -178,8 +182,10 @@ class RstegTcpClient:
 def send_over_http(DHOST, DPORT, SPORT, COVER, SECRET):
     # Read the data and save as a binary
     data = open(COVER, 'rb').read()
+
     print("Sending data as an HTTP POST request.")
     window.refresh()
+
     # HTTP Post request with data payload
     header = "POST /test HTTP/1.1\r\n"
     header += "Host: foo.example\r\n"
@@ -187,10 +193,12 @@ def send_over_http(DHOST, DPORT, SPORT, COVER, SECRET):
     header += "Content-Length: " + str(len(data)) + "\r\n\n"
 
     payload = header.encode('utf-8') + data
-    print("HTTP Header len: " + str(len(header.encode('utf-8'))))
+
+    # print("HTTP Header len: " + str(len(header.encode('utf-8'))))
     print("Data len: " + str(len(data)))
     print("Secret len: " + str(len(SECRET)))
     window.refresh()
+
     chunks = []
     interval = 1414  # payload chunk length
     # Slice the binary data in chunks the size of the payload length
@@ -201,18 +209,24 @@ def send_over_http(DHOST, DPORT, SPORT, COVER, SECRET):
     logger.debug('Creating TCP Session at %s:%s', DHOST, DPORT)
     print('Opening TCP Session at ' + DHOST + ':' + SPORT)
     window.refresh()
+
     client = RstegTcpClient(DHOST, int(DPORT), SECRET, int(SPORT))
+    start_time = time.time()
     client.connect()
-    window.refresh()
+
     print('3-way handshake completed.')
     window.refresh()
+
     for chunk in chunks:
         client.send(chunk)
+
     print('Data transfer ended.')
     window.refresh()
     client.close()
+
     logger.debug('TCP Session closed.')
     print('TCP Session closed')
+    print('... %s seconds ...' % (time.time() - start_time))
     window.refresh()
 
 
