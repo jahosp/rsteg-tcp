@@ -60,9 +60,10 @@ class RstegTcpServer:
         self.state = State.LISTEN  # Current server TCP state
         self.timeout = 3  # Timeout window for retransmission (in seconds)
         self.payload = b''  # Binary data recv
-        #self.rsteg_trigger = True  # Flag for rsteg mechanism
         self.rsteg_wait = False  # Flag that marks if we're waiting the secret
         self.window_size = None
+        self.artificial_loss = False
+        self.loss_prob = 0.1
         self.stego_key = 'WRONG_GENESIS'
 
     def handle_packet(self, pkt):
@@ -91,12 +92,16 @@ class RstegTcpServer:
                 self.state = State.CLOSE_WAIT
                 return self.ack_fin(pkt)
             if flag & 0x08:  # PSH
-                if self.rsteg_wait:  # we're waiting for the secret
-                    logger.debug('RCV -> SCRT')
-                    return self.ack_scrt(pkt)
-                else:  # normal data
-                    logger.debug('RCV -> PSH | DATA-TRANSFER')
-                    return self.ack_psh(pkt)
+                self.artificial_loss = random.random() < self.loss_prob
+                if self.artificial_loss:
+                    logger.debug('ARTIFICIAL LOSS')
+                else:
+                    if self.rsteg_wait:  # we're waiting for the secret
+                        logger.debug('RCV -> SCRT')
+                        return self.ack_scrt(pkt)
+                    else:  # normal data
+                        logger.debug('RCV -> PSH | DATA-TRANSFER')
+                        return self.ack_psh(pkt)
             return
 
         if self.state == State.LAST_ACK:
@@ -168,7 +173,10 @@ class RstegTcpServer:
         """Extracts secret data and acknowledges back."""
         secret = bytes(pkt[TCP].payload)
         logger.debug('SCRT RCV')
-        print(str(secret))
+        secret = secret.decode()
+        secret = secret.strip('\x00')
+        print(secret)
+        logger.debug('SCRT = ' + secret)
         self.rsteg_wait = False
         self.ack = pkt[TCP].seq + len(pkt[TCP].payload)
         self.seq = pkt[TCP].ack
@@ -204,7 +212,7 @@ if __name__ == '__main__':
     SPORT = 80
 
     server = RstegTcpServer(SPORT)
-
+    print('Created server on PORT ' + str(SPORT))
     # Create a Layer 3 RawSocket from where we'll sniff packets
     socket = L3RawSocket()
 

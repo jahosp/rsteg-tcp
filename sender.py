@@ -15,7 +15,6 @@ import PySimpleGUIQt as sg
 import logging
 import hashlib
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -48,6 +47,7 @@ class RstegTcpClient:
         self.window_size = None
         self.stego_key = 'WRONG_GENESIS'
         self.signal_retrans = False
+        self.retrans_prob = 0
 
     def acknowledge(self, pkt):
         """Crafts and sends the ACK for the parameter-supplied packet.
@@ -124,7 +124,7 @@ class RstegTcpClient:
         """Creates an IP/TCP package with the secret as payload.
         It also adds padding to fill all the payload
         """
-        secret_payload = str.encode(self.secret_payload) # convert secret to binary
+        secret_payload = str.encode(self.secret_payload)  # convert secret to binary
         secret_payload = secret_payload.ljust(1446, b'\0')  # Add padding to the secret for obfuscation
         secret_psh = self.ip / TCP(sport=self.sport, dport=self.dport, flags='PA', seq=self.seq,
                                    ack=self.ack) / secret_payload
@@ -140,14 +140,14 @@ class RstegTcpClient:
         # Invoke retransmission
         if self.signal_retrans:
             logger.debug('SND -> RETRANS SIGNAL')
-            psh = self.build(payload) # Signal added
+            psh = self.build(payload)  # Signal added
             ack = sr1(psh, timeout=1, retry=0, verbose=0)
-            if ack is None: # Ack not rcv
+            if ack is None:  # Ack not rcv
                 logger.debug('ACK TIMEOUT')
                 logger.debug('SND -> SCRT')
                 self.signal_retrans = False
                 secret_psh = self.build_secret()
-                ack = sr1(secret_psh, timeout = self.timeout, verbose=0)
+                ack = sr1(secret_psh, timeout=self.timeout, verbose=0)
                 if ack is not None:  # Response for secret
                     logger.debug('ACK SCRT')
                     self.secret_sent = True
@@ -159,7 +159,7 @@ class RstegTcpClient:
             psh = self.build(payload)
             logger.debug('SND -> PSH')
             ack = sr1(psh, timeout=1, retry=0, verbose=0)
-            if ack is None: # Ack not rcv, normal retrans
+            if ack is None:  # Ack not rcv, normal retrans
                 logger.debug('SND -> PSH | RETRANS')
                 ack = sr1(psh, timeout=2, retry=3, verbose=0)
                 if ack is not None:  # ACK for RETRANS
@@ -169,7 +169,11 @@ class RstegTcpClient:
                 logger.debug('RCV -> ACK')
                 self.seq += len(psh[Raw])
 
-        self.signal_retrans = retrans_prob(0.2)
+        if not self.secret_sent:
+            self.signal_retrans = retrans_prob(self.retrans_prob)
+        else:
+            self.signal_retrans = False
+
 
 def send_over_http(DHOST, DPORT, SPORT, COVER, SECRET):
     # Read the data and save as a binary
@@ -184,7 +188,7 @@ def send_over_http(DHOST, DPORT, SPORT, COVER, SECRET):
 
     payload = header.encode('utf-8') + data
     print("HTTP Header len: " + str(len(header.encode('utf-8'))))
-    print("Data len: "+ str(len(data)))
+    print("Data len: " + str(len(data)))
     print("Secret len: " + str(len(SECRET)))
     window.refresh()
     chunks = []
@@ -269,5 +273,3 @@ if __name__ == '__main__':
 
     # Remove window from screen
     window.close()
-
-
