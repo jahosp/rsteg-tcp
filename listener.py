@@ -63,7 +63,7 @@ class RstegTcpServer:
         self.rsteg_wait = False  # Flag that marks if we're waiting the secret
         self.window_size = None
         self.artificial_loss = False
-        self.loss_prob = 0.07
+        self.loss_prob = 0
         self.stego_key = 'WRONG_GENESIS'
 
     def handle_packet(self, pkt):

@@ -1,9 +1,10 @@
 # RSTEG-TCP
 
 ## Introduction
-This project is a TCP implementation of a steganographic method called retransmission steganography (RSTEG), proposed
+This project is a Proof-Of-Concept of a steganographic method called retransmission steganography (RSTEG), proposed
 by W. Mazurczyk, M. Smolarczyk and K. Szczypiorski in the [following article.]( https://doi.org/10.1007/s00500-009-0530-1 )
 It's written in Python 3.8 and uses the [Scapy](https://scapy.readthedocs.io/en/latest/) library to forge packets, as well to manage the layer 3 RawSockets. 
+In addition, the client uses the [PySimpleGUI](https://pysimplegui.readthedocs.io/en/latest/) wrapper for its UI.
 
 This is being developed as part of my final project to obtain my BD in Computer Engineering with a specialization in Information Technologies by the UAB. 
 
