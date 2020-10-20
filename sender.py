@@ -29,7 +29,7 @@ class RstegTcpClient:
 
     """
 
-    def __init__(self, dhost, dport, secret, sport=1009, ):
+    def __init__(self, dhost, dport, secret, sport=1009, rprob=0.07):
         """Class constructor.
         :param dhost: String with the destination IP addr.
         :param dport: Integer with the destination port number.
@@ -46,9 +46,9 @@ class RstegTcpClient:
         self.secret_payload = secret  # Steganogram
         self.secret_sent = False  # Flag for secret delivered
         self.window_size = None
-        self.stego_key = 'WRONG_GENESIS'
-        self.signal_retrans = False
-        self.retrans_prob = 0.3
+        self.stego_key = 'WRONG_GENESIS' # Shared SK
+        self.signal_retrans = False # Flag for signaled retransmission
+        self.retrans_prob = rprob # Retrans probability
 
     def acknowledge(self, pkt):
         """Crafts and sends the ACK for the parameter-supplied packet.
@@ -122,13 +122,20 @@ class RstegTcpClient:
         return psh
 
     def build_secret(self):
-        """Creates an IP/TCP package with the secret as payload.
-        It also adds padding to fill all the payload
+        """Creates an IP/TCP package with a chunk secret as payload.
+        It also adds padding to fill all the payload in case the chunk takes less than the MTU
         """
-        secret_payload = str.encode(self.secret_payload)  # convert secret to binary
-        secret_payload = secret_payload.ljust(1446, b'\0')  # Add padding to the secret for obfuscation
+
+        if len(self.secret_payload) == 1:   # Last secret chunk
+            self.secret_sent = True
+            secret_payload = self.secret_payload.pop(0)
+        else:
+            secret_payload = self.secret_payload.pop(0)
+
+        # secret_payload = secret_payload.ljust(1446, b'\0')  # Add padding to the secret for obfuscation
         secret_psh = self.ip / TCP(sport=self.sport, dport=self.dport, flags='PA', seq=self.seq,
                                    ack=self.ack) / secret_payload
+
         return secret_psh
 
     def send(self, payload):
@@ -151,7 +158,7 @@ class RstegTcpClient:
                 ack = sr1(secret_psh, timeout=self.timeout, verbose=0)
                 if ack is not None:  # Response for secret
                     logger.debug('ACK SCRT')
-                    self.secret_sent = True
+                    # self.secret_sent = True
                     self.seq += len(psh[Raw])
                 else:  # Secret lost
                     logger.debug('OH SHIT')
@@ -179,9 +186,21 @@ class RstegTcpClient:
             self.signal_retrans = False
 
 
-def send_over_http(DHOST, DPORT, SPORT, COVER, SECRET):
+def send_over_http(DHOST, DPORT, SPORT, COVER, SECRET, rprob):
+    """
+    Opens a TCP connection with DHOST from SPORT to DPORT and sends
+    the COVER as an HTTP POST request. While doing the data transfer
+    the SECRET will be sent following the RSTEG method.
+    :param DHOST: ip addr of the host
+    :param DPORT: host port number
+    :param SPORT: source port number
+    :param COVER: file path for cover data
+    :param SECRET: file path for secret data
+    :return:
+    """
     # Read the data and save as a binary
     data = open(COVER, 'rb').read()
+    secret = open(SECRET, 'rb').read()
 
     print("Sending data as an HTTP POST request.")
     window.refresh()
@@ -194,30 +213,39 @@ def send_over_http(DHOST, DPORT, SPORT, COVER, SECRET):
 
     payload = header.encode('utf-8') + data
 
-    # print("HTTP Header len: " + str(len(header.encode('utf-8'))))
+    print("HTTP Header len: " + str(len(header.encode('utf-8'))))
     print("Data len: " + str(len(data)))
     print("Secret len: " + str(len(SECRET)))
     window.refresh()
 
-    chunks = []
+    payload_chunks = []
     interval = 1414  # payload chunk length
     # Slice the binary data in chunks the size of the payload length
     for n in range(0, len(payload), interval):
-        chunks.append(payload[n:n + interval])
+        payload_chunks.append(payload[n:n + interval])
+
+    secret_chunks = []
+    interval = 1446
+    for n in range(0, len(secret), interval):
+        secret_chunks.append(secret[n:n + interval])
+
+    print("Data chunks: " + str(len(payload_chunks)))
+    print("Secret chunks: " + str(len(secret_chunks)))
+    window.refresh()
 
     # Connect to the server, send the payload (+ rsteg the secret) and close connection
     logger.debug('Creating TCP Session at %s:%s', DHOST, DPORT)
     print('Opening TCP Session at ' + DHOST + ':' + SPORT)
     window.refresh()
 
-    client = RstegTcpClient(DHOST, int(DPORT), SECRET, int(SPORT))
+    client = RstegTcpClient(DHOST, int(DPORT), secret_chunks, int(SPORT), float(rprob))
     start_time = time.time()
     client.connect()
 
     print('3-way handshake completed.')
     window.refresh()
 
-    for chunk in chunks:
+    for chunk in payload_chunks:
         client.send(chunk)
 
     print('Data transfer ended.')
@@ -248,8 +276,14 @@ if __name__ == '__main__':
               [sg.Text('Source Port', size=(15, 1)), sg.InputText(enable_events=True, key='sport')],
               [sg.Text('Cover data', size=(8, 1)), sg.Input(key='cover'), sg.FileBrowse()],
               [sg.Text('Secret data', size=(8, 1)), sg.Input(key='secret'), sg.FileBrowse()],
+              [sg.HorizontalSeparator("grey")],
+              [sg.Text('Send as:'), sg.Combo(values=['HTTP', 'TCP Only'], default_value='HTTP', readonly=True,
+                                             auto_size_text=True)],
+              [sg.Text('Retransmission probability'), sg.InputText(default_text='0.07', enable_events=True, key='prob')],
+              [sg.HorizontalSeparator("grey")],
               [sg.Text('STATUS')],
               [sg.Output(size=(40, 10), key='-OUTPUT-')],
+              [sg.HorizontalSeparator()],
               [sg.Button('Submit'), sg.Button('Clear log')]]
 
     # Create the window
@@ -272,7 +306,7 @@ if __name__ == '__main__':
                         print('Starting RSTEG TCP')
                         window.refresh()
                         send_over_http(values['dhost'], values['dport'], values['sport'],
-                                       values['cover'], values['secret'])
+                                       values['cover'], values['secret'], values['prob'])
                         sg.popup_ok('Data and secret delivered!', title="Success", line_width=35)
                     else:
                         print('Source Port is not valid.')

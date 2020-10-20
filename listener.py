@@ -59,12 +59,13 @@ class RstegTcpServer:
         self.connected = False  # Connection established
         self.state = State.LISTEN  # Current server TCP state
         self.timeout = 3  # Timeout window for retransmission (in seconds)
-        self.payload = b''  # Binary data recv
+        self.payload = b''  # Data rcv
+        self.secret = b''  # Secret rcv
         self.rsteg_wait = False  # Flag that marks if we're waiting the secret
         self.window_size = None
-        self.artificial_loss = False
-        self.loss_prob = 0
-        self.stego_key = 'WRONG_GENESIS'
+        self.artificial_loss = False  # Artificial packet loss flag
+        self.loss_prob = 0  # Artificial packet loss probability
+        self.stego_key = 'WRONG_GENESIS' # Shared SK
 
     def handle_packet(self, pkt):
         """Reads the TCP flag from the packet in order to choose the function that handles it (according to the state).
@@ -153,7 +154,7 @@ class RstegTcpServer:
         logger.debug('DATA RCV')
         http_req = b'POST'
         if http_req == payload[:4]:
-            payload = payload[104:]
+            payload = payload[105:]
 
         self.payload += payload
         # Check for signal
@@ -173,10 +174,11 @@ class RstegTcpServer:
         """Extracts secret data and acknowledges back."""
         secret = bytes(pkt[TCP].payload)
         logger.debug('SCRT RCV')
-        secret = secret.decode()
-        secret = secret.strip('\x00')
-        print(secret)
-        logger.debug('SCRT = ' + secret)
+        # secret = secret.decode()
+        # secret = secret.strip('\x00')
+
+        self.secret += secret
+
         self.rsteg_wait = False
         self.ack = pkt[TCP].seq + len(pkt[TCP].payload)
         self.seq = pkt[TCP].ack
@@ -192,8 +194,10 @@ class RstegTcpServer:
 
     def save_payload(self):
         """Saves the payload to disk and changes state back to LISTEN."""
-        open('meme.jpg', 'wb').write(self.payload)
+        open('payload.gif', 'wb').write(self.payload)
         logger.debug('Payload saved to disk')
+        open('secret.jpg', 'wb').write(self.secret)
+        logger.debug('Secret saved to disk')
         self.state = State.LISTEN
         print('LISTEN')
         self.rsteg_wait = False
