@@ -213,7 +213,6 @@ def send_over_http(DHOST, DPORT, SPORT, COVER, SECRET, rprob):
 
     payload = header.encode('utf-8') + data
 
-    print("HTTP Header len: " + str(len(header.encode('utf-8'))))
     print("Data len: " + str(len(data)))
     print("Secret len: " + str(len(SECRET)))
     window.refresh()

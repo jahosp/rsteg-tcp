@@ -147,17 +147,18 @@ class RstegTcpServer:
         """Extracts payload data, inspects id seq. and acknowledges back or not accordingly."""
         # Extract data from package
         payload = bytes(pkt[TCP].payload)
-        # Extract id_seq from the data
+        # Extract id_seq from the data (last 32 bytes)
         id_seq = payload[-32:]
-        # Clean data
+        # Clean payload
         payload = payload[:-32]
         logger.debug('DATA RCV')
+        # Extract HTTP headers
         http_req = b'POST'
         if http_req == payload[:4]:
-            payload = payload[105:]
-
+            payload = payload.split(b'\r\n\n')[1]
         self.payload += payload
-        # Check for signal
+
+        # Check id seq for retrans signal
         calc_id_seq = hashlib.sha256((self.stego_key + str(pkt[TCP].seq) + str(1)).encode()).digest()
         if calc_id_seq == id_seq: # Detected signal
             logger.debug('ID-SEQ MATCH')
