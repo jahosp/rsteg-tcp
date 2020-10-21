@@ -46,9 +46,13 @@ class RstegTcpClient:
         self.secret_payload = secret  # Steganogram
         self.secret_sent = False  # Flag for secret delivered
         self.window_size = None
-        self.stego_key = 'WRONG_GENESIS' # Shared SK
-        self.signal_retrans = False # Flag for signaled retransmission
-        self.retrans_prob = rprob # Retrans probability
+        self.stego_key = 'WRONG_GENESIS'  # Shared SK
+        self.signal_retrans = False  # Flag for signaled retransmission
+        self.retrans_prob = rprob  # Retrans probability
+
+        self.timer_flag = True
+        self.start_time = None
+        self.end_time = None
 
     def acknowledge(self, pkt):
         """Crafts and sends the ACK for the parameter-supplied packet.
@@ -103,6 +107,7 @@ class RstegTcpClient:
         send(ack, verbose=0)
 
         logger.debug('Session terminated.')
+        logger.debug('RSTEG TIME: ' + str(self.end_time))
 
     def build(self, payload):
         """Creates an IP/TCP package with the supplied payload.
@@ -126,13 +131,15 @@ class RstegTcpClient:
         It also adds padding to fill all the payload in case the chunk takes less than the MTU
         """
 
-        if len(self.secret_payload) == 1:   # Last secret chunk
+        if len(self.secret_payload) == 1:  # Last secret chunk
             self.secret_sent = True
             secret_payload = self.secret_payload.pop(0)
+            self.end_time = time.time() - self.start_time
+
         else:
             secret_payload = self.secret_payload.pop(0)
 
-        # secret_payload = secret_payload.ljust(1446, b'\0')  # Add padding to the secret for obfuscation
+        secret_payload = secret_payload.ljust(1446, b'\0')  # Add padding to the secret for obfuscation
         secret_psh = self.ip / TCP(sport=self.sport, dport=self.dport, flags='PA', seq=self.seq,
                                    ack=self.ack) / secret_payload
 
@@ -154,6 +161,11 @@ class RstegTcpClient:
                 logger.debug('ACK TIMEOUT')
                 logger.debug('SND -> SCRT')
                 self.signal_retrans = False
+
+                if self.timer_flag:
+                    self.start_time = time.time()
+                    self.timer_flag = False
+
                 secret_psh = self.build_secret()
                 ack = sr1(secret_psh, timeout=self.timeout, verbose=0)
                 if ack is not None:  # Response for secret
@@ -206,7 +218,7 @@ def send_over_http(DHOST, DPORT, SPORT, COVER, SECRET, rprob):
     window.refresh()
 
     # HTTP Post request with data payload
-    header = "POST /test HTTP/1.1\r\n"
+    header = "POST /upload HTTP/1.1\r\n"
     header += "Host: foo.example\r\n"
     header += "Content-Type: application/octet-stream\r\n"
     header += "Content-Length: " + str(len(data)) + "\r\n\n"
@@ -278,7 +290,8 @@ if __name__ == '__main__':
               [sg.HorizontalSeparator("grey")],
               [sg.Text('Send as:'), sg.Combo(values=['HTTP', 'TCP Only'], default_value='HTTP', readonly=True,
                                              auto_size_text=True)],
-              [sg.Text('Retransmission probability'), sg.InputText(default_text='0.07', enable_events=True, key='prob')],
+              [sg.Text('Retransmission probability'),
+               sg.InputText(default_text='0.07', enable_events=True, key='prob')],
               [sg.HorizontalSeparator("grey")],
               [sg.Text('STATUS')],
               [sg.Output(size=(40, 10), key='-OUTPUT-')],
