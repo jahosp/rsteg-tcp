@@ -175,7 +175,8 @@ class RstegTcpServer:
         """Extracts secret data and acknowledges back."""
         secret = bytes(pkt[TCP].payload)
         logger.debug('SCRT RCV')
-        secret = secret.strip(b'\0')
+        secret = secret[:-2]  # strip compensation code
+        secret = secret.strip(b'/')
 
         self.secret += secret
 

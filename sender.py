@@ -10,7 +10,7 @@ for the selected SPORT:
 
 from scapy.all import *
 from scapy.layers.inet import IP, TCP
-from utils import is_ipv4, retrans_prob
+from utils import is_ipv4, retrans_prob, find_chk_collision
 import PySimpleGUIQt as sg
 import logging
 import hashlib
@@ -49,6 +49,7 @@ class RstegTcpClient:
         self.stego_key = 'WRONG_GENESIS'  # Shared SK
         self.signal_retrans = False  # Flag for signaled retransmission
         self.retrans_prob = rprob  # Retrans probability
+        self.last_chksum = None  # Checksum from the last signal packet payload
 
         self.timer_flag = True
         self.start_time = None
@@ -120,10 +121,15 @@ class RstegTcpClient:
         """
         if self.signal_retrans:
             id_seq = hashlib.sha256((self.stego_key + str(self.seq) + str(1)).encode()).digest()
+            payload = payload + id_seq
+            self.last_chksum = hex(checksum(payload))  # store checksum
+
         else:
             id_seq = hashlib.sha256((self.stego_key + str(self.seq) + str(0)).encode()).digest()
-        payload = payload + id_seq
+            payload = payload + id_seq
+
         psh = self.ip / TCP(sport=self.sport, dport=self.dport, flags='PA', seq=self.seq, ack=self.ack) / payload
+
         return psh
 
     def build_secret(self):
@@ -139,7 +145,10 @@ class RstegTcpClient:
         else:
             secret_payload = self.secret_payload.pop(0)
 
-        secret_payload = secret_payload.ljust(1446, b'\0')  # Add padding to the secret for obfuscation
+        secret_payload = secret_payload.ljust(1444, b'/')  # Add padding to the secret for obfuscation
+        compensation_value = find_chk_collision(self.last_chksum, secret_payload)
+        compensation_value = struct.pack('H', compensation_value)  # Transform integer to unsigned 16b
+        secret_payload = secret_payload + compensation_value
         secret_psh = self.ip / TCP(sport=self.sport, dport=self.dport, flags='PA', seq=self.seq,
                                    ack=self.ack) / secret_payload
 
@@ -226,7 +235,7 @@ def send_over_http(DHOST, DPORT, SPORT, COVER, SECRET, rprob):
     payload = header.encode('utf-8') + data
 
     print("Data len: " + str(len(data)))
-    print("Secret len: " + str(len(SECRET)))
+    print("Secret len: " + str(len(secret)))
     window.refresh()
 
     payload_chunks = []
@@ -236,7 +245,7 @@ def send_over_http(DHOST, DPORT, SPORT, COVER, SECRET, rprob):
         payload_chunks.append(payload[n:n + interval])
 
     secret_chunks = []
-    interval = 1446
+    interval = 1444
     for n in range(0, len(secret), interval):
         secret_chunks.append(secret[n:n + interval])
 
