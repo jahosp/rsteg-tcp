@@ -156,6 +156,7 @@ class RstegTcpServer:
         http_req = b'POST'
         if http_req == payload[:4]:
             payload = payload.split(b'\r\n\n')[1]
+        # Store payload
         self.payload += payload
 
         # Check id seq for retrans signal

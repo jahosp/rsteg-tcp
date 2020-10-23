@@ -234,9 +234,9 @@ def send_over_http(DHOST, DPORT, SPORT, COVER, SECRET, rprob):
 
     payload = header.encode('utf-8') + data
 
-    print("Data len: " + str(len(data)))
-    print("Secret len: " + str(len(secret)))
-    window.refresh()
+    # print("Data len: " + str(len(data)))
+    # print("Secret len: " + str(len(secret)))
+    # window.refresh()
 
     payload_chunks = []
     interval = 1414  # payload chunk length
@@ -249,9 +249,9 @@ def send_over_http(DHOST, DPORT, SPORT, COVER, SECRET, rprob):
     for n in range(0, len(secret), interval):
         secret_chunks.append(secret[n:n + interval])
 
-    print("Data chunks: " + str(len(payload_chunks)))
-    print("Secret chunks: " + str(len(secret_chunks)))
-    window.refresh()
+    # print("Data chunks: " + str(len(payload_chunks)))
+    # print("Secret chunks: " + str(len(secret_chunks)))
+    # window.refresh()
 
     # Connect to the server, send the payload (+ rsteg the secret) and close connection
     logger.debug('Creating TCP Session at %s:%s', DHOST, DPORT)
@@ -328,7 +328,6 @@ if __name__ == '__main__':
                         window.refresh()
                         send_over_http(values['dhost'], values['dport'], values['sport'],
                                        values['cover'], values['secret'], values['prob'])
-                        sg.popup_ok('Data and secret delivered!', title="Success", line_width=35)
                     else:
                         print('Source Port is not valid.')
                 else:
