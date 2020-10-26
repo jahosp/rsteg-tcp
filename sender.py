@@ -29,13 +29,14 @@ class RstegTcpClient:
 
     """
 
-    def __init__(self, dhost, dport, secret, sport=1009, rprob=0.07):
+    def __init__(self, dhost, dport, secret, sport=49152, rprob=0.07):
         """Class constructor.
         :param dhost: String with the destination IP addr.
         :param dport: Integer with the destination port number.
         :param secret: Steganogram to be delivered during.
         :param sport: Optional parameter for the source port number. Defaults to 1009.
         """
+        self.s = L3RawSocket()  # L3 Scapy Raw Socket
         self.ip = IP(dst=dhost)  # Scapy IP packet with the server IP in it
         self.dport = dport  # Destination port
         self.sport = sport  # If none specified, defaults to unassigned 1009 port
@@ -78,7 +79,7 @@ class RstegTcpClient:
         # Craft SYN packet
         syn = self.ip / TCP(sport=self.sport, dport=self.dport, seq=self.seq, flags='S')
         # Send SYN and wait timeout for SYN_ACK
-        syn_ack = sr1(syn, timeout=self.timeout, verbose=0)  # sr1 = send & receive layer 3
+        syn_ack = self.s.sr1(syn, timeout=self.timeout, verbose=0)  # sr1 = send & receive layer 3
         # Update ACK and SEQ fields
         self.ack = syn_ack[TCP].seq + 1
         self.seq = syn_ack[TCP].ack
@@ -86,7 +87,7 @@ class RstegTcpClient:
         self.window_size = syn_ack[TCP].window
         # Craft ACK for the SYN_ACK and send it
         ack = self.ip / TCP(sport=self.sport, dport=self.dport, seq=self.seq, flags='A', ack=self.ack)
-        send(ack, verbose=0)
+        self.s.send(ack)
         logger.debug('3-way handshake completed')
         # Connection established
         self.connected = True
@@ -97,7 +98,8 @@ class RstegTcpClient:
         # Craft and send the FIN/ACK
         logger.debug('SND -> FIN')
         fin = self.ip / TCP(sport=self.sport, dport=self.dport, flags='FA', seq=self.seq, ack=self.ack)
-        fin_ack = sr1(fin, timeout=self.timeout, retry=5, filter='tcp[tcpflags] & tcp-fin != 0', verbose=0)
+        # fin_ack = self.s.sr1(fin, timeout=self.timeout, retry=5, filter='tcp[tcpflags] & tcp-fin != 0', verbose=0)
+        fin_ack = self.s.sr1(fin, timeout=self.timeout, retry=5, verbose=0)
         logger.debug('RCV -> FIN/ACK')
         # Update ACK and SEQ fields
         self.ack = fin_ack[TCP].seq + 1
@@ -105,7 +107,7 @@ class RstegTcpClient:
         # Send final ACK
         ack = self.ip / TCP(sport=self.sport, dport=self.dport, flags='A', seq=self.seq, ack=self.ack)
         logger.debug('SND -> FINAL_ACK')
-        send(ack, verbose=0)
+        self.s.send(ack)
 
         logger.debug('Session terminated.')
         logger.debug('RSTEG TIME: ' + str(self.end_time))
@@ -165,7 +167,7 @@ class RstegTcpClient:
         if self.signal_retrans:
             logger.debug('SND -> RETRANS SIGNAL')
             psh = self.build(payload)  # Signal added
-            ack = sr1(psh, timeout=1, retry=0, verbose=0)
+            ack = self.s.sr1(psh, timeout=0.01, retry=0, verbose=0)
             if ack is None:  # Ack not rcv
                 logger.debug('ACK TIMEOUT')
                 logger.debug('SND -> SCRT')
@@ -176,7 +178,7 @@ class RstegTcpClient:
                     self.timer_flag = False
 
                 secret_psh = self.build_secret()
-                ack = sr1(secret_psh, timeout=self.timeout, verbose=0)
+                ack = self.s.sr1(secret_psh, timeout=self.timeout, verbose=0)
                 if ack is not None:  # Response for secret
                     logger.debug('ACK SCRT')
                     # self.secret_sent = True
@@ -185,15 +187,15 @@ class RstegTcpClient:
                     logger.debug('OH SHIT')
                     psh = self.build(payload)
                     logger.debug('EDGE CASE')
-                    ack = sr1(psh, timeout=1, retry=0, verbose=0)
+                    ack = self.s.sr1(psh, timeout=1, retry=0, verbose=0)
         # Normal data transfer
         else:
             psh = self.build(payload)
             logger.debug('SND -> PSH')
-            ack = sr1(psh, timeout=1, retry=0, verbose=0)
+            ack = self.s.sr1(psh, timeout=1, retry=0, verbose=0)
             if ack is None:  # Ack not rcv, normal retrans
                 logger.debug('SND -> PSH | RETRANS')
-                ack = sr1(psh, timeout=2, retry=3, verbose=0)
+                ack = self.s.sr1(psh, timeout=2, retry=3, verbose=0)
                 if ack is not None:  # ACK for RETRANS
                     logger.debug('RCV -> ACK')
                     self.seq += len(psh[Raw])
@@ -234,10 +236,6 @@ def send_over_http(DHOST, DPORT, SPORT, COVER, SECRET, rprob):
 
     payload = header.encode('utf-8') + data
 
-    # print("Data len: " + str(len(data)))
-    # print("Secret len: " + str(len(secret)))
-    # window.refresh()
-
     payload_chunks = []
     interval = 1414  # payload chunk length
     # Slice the binary data in chunks the size of the payload length
@@ -249,9 +247,9 @@ def send_over_http(DHOST, DPORT, SPORT, COVER, SECRET, rprob):
     for n in range(0, len(secret), interval):
         secret_chunks.append(secret[n:n + interval])
 
-    # print("Data chunks: " + str(len(payload_chunks)))
-    # print("Secret chunks: " + str(len(secret_chunks)))
-    # window.refresh()
+    print("Data chunks: " + str(len(payload_chunks)))
+    print("Secret chunks: " + str(len(secret_chunks)))
+    window.refresh()
 
     # Connect to the server, send the payload (+ rsteg the secret) and close connection
     logger.debug('Creating TCP Session at %s:%s', DHOST, DPORT)
@@ -259,22 +257,27 @@ def send_over_http(DHOST, DPORT, SPORT, COVER, SECRET, rprob):
     window.refresh()
 
     client = RstegTcpClient(DHOST, int(DPORT), secret_chunks, int(SPORT), float(rprob))
-    start_time = time.time()
+
     client.connect()
 
     print('3-way handshake completed.')
     window.refresh()
+    start_time = time.time()
 
     for chunk in payload_chunks:
         client.send(chunk)
 
     print('Data transfer ended.')
+    end_time = time.time() - start_time
+    print('Transfer time: %.2f seconds ...' % end_time)
+    print('Cover speed: %.2f' % (len(payload)/end_time) + ' bytes')
+    print('Secret speed: %.2f' % (len(secret)/end_time) + ' bytes')
     window.refresh()
     client.close()
 
     logger.debug('TCP Session closed.')
     print('TCP Session closed')
-    print('... %s seconds ...' % (time.time() - start_time))
+
     window.refresh()
 
 
@@ -287,13 +290,15 @@ if __name__ == '__main__':
                         datefmt='%m/%d/%Y %I:%M:%S %p',
                         level=logging.DEBUG)
     logger.setLevel(logging.DEBUG)
-
+    # port = random.randint(49152, 65535)
     # Application Layout
     sg.theme('Default')
     layout = [[sg.Text("Please enter the following parameters:")],
               [sg.Text('Destination Host IP', size=(15, 1)), sg.InputText(enable_events=True, key='dhost')],
-              [sg.Text('Destination Port ', size=(15, 1)), sg.InputText(enable_events=True, key='dport')],
-              [sg.Text('Source Port', size=(15, 1)), sg.InputText(enable_events=True, key='sport')],
+              [sg.Text('Destination Port ', size=(15, 1)), sg.InputText(enable_events=True, key='dport',
+                                                                        default_text='80')],
+              [sg.Text('Source Port', size=(15, 1)), sg.InputText(enable_events=True, key='sport',
+                                                                  default_text='49152')],
               [sg.Text('Cover data', size=(8, 1)), sg.Input(key='cover'), sg.FileBrowse()],
               [sg.Text('Secret data', size=(8, 1)), sg.Input(key='secret'), sg.FileBrowse()],
               [sg.HorizontalSeparator("grey")],

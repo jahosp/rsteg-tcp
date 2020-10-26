@@ -51,6 +51,7 @@ class RstegTcpServer:
         """Class constructor.
         :param sport: Source port number.
         """
+        self.s = L3RawSocket()
         self.ip = None  # Scapy IP packet with the client IP
         self.dport = 0  # Destination port
         self.sport = sport  # Source port
@@ -129,7 +130,7 @@ class RstegTcpServer:
         self.dport = pkt[TCP].sport
         self.ack = pkt[TCP].seq + 1
         syn_ack = self.ip / TCP(sport=self.sport, dport=self.dport, seq=self.seq, flags='SA', ack=self.ack)
-        send(syn_ack)
+        self.s.send(syn_ack)
         logger.debug('SND -> SYN/ACK')
 
     def ack_fin(self, pkt):
@@ -141,7 +142,7 @@ class RstegTcpServer:
         self.seq = pkt[TCP].ack
         ack_fin = self.ip / TCP(sport=self.sport, dport=self.dport, seq=self.seq, flags='FA', ack=self.ack)
         logger.debug('SND -> FIN/ACK | LAST_ACK')
-        send(ack_fin)
+        self.s.send(ack_fin)
 
     def ack_psh(self, pkt):
         """Extracts payload data, inspects id seq. and acknowledges back or not accordingly."""
@@ -149,16 +150,6 @@ class RstegTcpServer:
         payload = bytes(pkt[TCP].payload)
         # Extract id_seq from the data (last 32 bytes)
         id_seq = payload[-32:]
-        # Clean payload
-        payload = payload[:-32]
-        logger.debug('DATA RCV')
-        # Extract HTTP headers
-        http_req = b'POST'
-        if http_req == payload[:4]:
-            payload = payload.split(b'\r\n\n')[1]
-        # Store payload
-        self.payload += payload
-
         # Check id seq for retrans signal
         calc_id_seq = hashlib.sha256((self.stego_key + str(pkt[TCP].seq) + str(1)).encode()).digest()
         if calc_id_seq == id_seq: # Detected signal
@@ -169,8 +160,20 @@ class RstegTcpServer:
             self.ack = pkt[TCP].seq + len(pkt[TCP].payload)
             self.seq = pkt[TCP].ack
             ack = self.ip / TCP(sport=self.sport, dport=self.dport, seq=self.seq, flags='A', ack=self.ack)
-            send(ack)
+            self.s.send(ack)
             logger.debug('SND -> ACK | DATA-TRANSFER')
+
+        # Clean payload
+        payload = payload[:-32]
+        logger.debug('DATA RCV')
+        # Extract HTTP headers
+        http_req = b'POST'
+        if http_req == payload[:4]:
+            payload = payload.split(b'\r\n\n')[1]
+        # Store payload
+        self.payload += payload
+
+
 
     def ack_scrt(self, pkt):
         """Extracts secret data and acknowledges back."""
@@ -185,24 +188,28 @@ class RstegTcpServer:
         self.ack = pkt[TCP].seq + len(pkt[TCP].payload)
         self.seq = pkt[TCP].ack
         ack = self.ip / TCP(sport=self.sport, dport=self.dport, seq=self.seq, flags='A', ack=self.ack)
-        send(ack)
+        self.s.send(ack)
         logger.debug('SND -> ACK | DATA-TRANSFER')
 
     def rst(self, pkt):
         """Build and send a RST packet to non existing connection."""
         ip = IP(dst=pkt[IP].src)
         rst = ip / TCP(sport=self.sport, dport=pkt[TCP].sport, flags='RA', seq=0, ack=0)
-        send(rst)
+        self.s.send(rst)
 
     def save_payload(self):
         """Saves the payload to disk and changes state back to LISTEN."""
         open('payload.gif', 'wb').write(self.payload)
         logger.debug('Payload saved to disk')
+        print('Payload: ' + str(len(self.payload)))
         open('secret.jpg', 'wb').write(self.secret)
+        print('Secret: ' + str(len(self.secret)))
         logger.debug('Secret saved to disk')
         self.state = State.LISTEN
         print('LISTEN')
         self.rsteg_wait = False
+        self.payload = b''
+        self.secret = b''
 
 
 if __name__ == '__main__':
