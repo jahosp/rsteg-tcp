@@ -10,7 +10,7 @@ for the selected SPORT:
 
 from scapy.all import *
 from scapy.layers.inet import IP, TCP
-from utils import is_ipv4, retrans_prob, find_chk_collision
+from utils import is_ipv4, retrans_prob, find_chk_collision, find_compensation
 import PySimpleGUIQt as sg
 import logging
 import hashlib
@@ -82,7 +82,7 @@ class RstegTcpClient:
         # Craft SYN packet
         syn = self.ip / TCP(sport=self.sport, dport=self.dport, seq=self.seq, flags='S')
         # Send SYN and wait timeout for SYN_ACK
-        syn_ack = self.s.sr1(syn, timeout=self.timeout, verbose=0)  # sr1 = send & receive layer 3
+        syn_ack = self.s.sr1(syn, timeout=5, verbose=0)  # sr1 = send & receive layer 3
         # Update ACK and SEQ fields
         self.ack = syn_ack[TCP].seq + 1
         self.seq = syn_ack[TCP].ack
@@ -102,7 +102,7 @@ class RstegTcpClient:
         logger.debug('SND -> FIN')
         fin = self.ip / TCP(sport=self.sport, dport=self.dport, flags='FA', seq=self.seq, ack=self.ack)
         # fin_ack = self.s.sr1(fin, timeout=self.timeout, retry=5, filter='tcp[tcpflags] & tcp-fin != 0', verbose=0)
-        fin_ack = self.s.sr1(fin, timeout=self.timeout, retry=5, verbose=0)
+        fin_ack = self.s.sr1(fin, timeout=5, retry=5, verbose=0)
         logger.debug('RCV -> FIN/ACK')
         # Update ACK and SEQ fields
         self.ack = fin_ack[TCP].seq + 1
@@ -151,7 +151,8 @@ class RstegTcpClient:
             secret_payload = self.secret_payload.pop(0)
 
         secret_payload = secret_payload.ljust(1444, b'/')  # Add padding to the secret for obfuscation
-        compensation_value = find_chk_collision(self.last_chksum, secret_payload)
+        # compensation_value = find_chk_collision(self.last_chksum, secret_payload)
+        compensation_value = find_compensation(self.last_chksum, secret_payload)
         compensation_value = struct.pack('H', compensation_value)  # Transform integer to unsigned 16b
         secret_payload = secret_payload + compensation_value
         secret_psh = self.ip / TCP(sport=self.sport, dport=self.dport, flags='PA', seq=self.seq,
@@ -170,7 +171,7 @@ class RstegTcpClient:
         if self.signal_retrans:
             logger.debug('SND -> RETRANS SIGNAL')
             psh = self.build(payload)  # Signal added
-            ack = self.s.sr1(psh, timeout=0.01, retry=0, verbose=0)
+            ack = self.s.sr1(psh, timeout=0.05, retry=0, verbose=0)
             if ack is None:  # Ack not rcv
                 logger.debug('ACK TIMEOUT')
                 logger.debug('SND -> SCRT')
@@ -181,10 +182,9 @@ class RstegTcpClient:
                     self.timer_flag = False
 
                 secret_psh = self.build_secret()
-                ack = self.s.sr1(secret_psh, timeout=self.timeout, verbose=0)
+                ack = self.s.sr1(secret_psh, timeout=2, verbose=0)
                 if ack is not None:  # Response for secret
                     logger.debug('ACK SCRT')
-                    # self.secret_sent = True
                     self.seq += len(psh[Raw])
                 else:  # Secret lost
                     logger.debug('OH SHIT')
@@ -195,7 +195,7 @@ class RstegTcpClient:
         else:
             psh = self.build(payload)
             logger.debug('SND -> PSH')
-            ack = self.s.sr1(psh, timeout=1, retry=0, verbose=0)
+            ack = self.s.sr1(psh, timeout=2, retry=0, verbose=0)
             if ack is None:  # Ack not rcv, normal retrans
                 logger.debug('SND -> PSH | RETRANS')
                 ack = self.s.sr1(psh, timeout=2, retry=3, verbose=0)
