@@ -37,11 +37,14 @@ class RstegTcpClient:
         :param sport: Optional parameter for the source port number. Defaults to 1009.
         """
         self.s = L3RawSocket()  # L3 Scapy Raw Socket
-        self.ip = IP(dst=dhost)  # Scapy IP packet with the server IP in it
         self.dport = dport  # Destination port
         self.sport = sport  # If none specified, defaults to unassigned 1009 port
         self.seq = 0  # Sequence number
         self.ack = 0  # Acknowledge number
+        self.ip = IP(dst=dhost)  # Scapy IP packet with the server IP in it
+        self.tcp = TCP(sport=sport, dport=dport)
+        self.psh = self.ip / self.tcp
+
         self.connected = False  # Flag for connection established
         self.timeout = 3  # Timeout window for retransmission (in seconds)
         self.secret_payload = secret  # Steganogram
@@ -255,7 +258,7 @@ def send_over_http(DHOST, DPORT, SPORT, COVER, SECRET, rprob):
     logger.debug('Creating TCP Session at %s:%s', DHOST, DPORT)
     print('Opening TCP Session at ' + DHOST + ':' + SPORT)
     window.refresh()
-
+    conf.recv_poll_rate = 0.001
     client = RstegTcpClient(DHOST, int(DPORT), secret_chunks, int(SPORT), float(rprob))
 
     client.connect()

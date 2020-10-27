@@ -13,6 +13,7 @@ from scapy.all import *
 from scapy.layers.inet import TCP, IP
 import logging
 import hashlib
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +58,7 @@ class RstegTcpServer:
         self.sport = sport  # Source port
         self.seq = 0  # Sequence number
         self.ack = 0  # Acknowledge Number
+        self.ack_segment = TCP(sport=self.sport, flags='A')
         self.connected = False  # Connection established
         self.state = State.LISTEN  # Current server TCP state
         self.timeout = 3  # Timeout window for retransmission (in seconds)
@@ -66,13 +68,18 @@ class RstegTcpServer:
         self.window_size = None
         self.artificial_loss = False  # Artificial packet loss flag
         self.loss_prob = 0  # Artificial packet loss probability
-        self.stego_key = 'WRONG_GENESIS' # Shared SK
+        self.stego_key = 'WRONG_GENESIS'  # Shared SK
+        # Metrics
+        self.start_time = 0
+        self.n_ack = 0
+        self.avg_ack_time = 0
 
     def handle_packet(self, pkt):
         """Reads the TCP flag from the packet in order to choose the function that handles it (according to the state).
         :param pkt: Scapy packet received by the L3 socket.
         :return: Returns the appropriated handling function.
         """
+        self.start_time = time.time()
         flag = pkt[TCP].flags  # incoming packet flag
 
         if self.state == State.LISTEN:
@@ -128,6 +135,7 @@ class RstegTcpServer:
         self.seq = random.randrange(0, (2 ** 32) - 1)
         self.ip = IP(dst=pkt[IP].src)
         self.dport = pkt[TCP].sport
+        self.ack_segment[TCP].dport = self.dport
         self.ack = pkt[TCP].seq + 1
         syn_ack = self.ip / TCP(sport=self.sport, dport=self.dport, seq=self.seq, flags='SA', ack=self.ack)
         self.s.send(syn_ack)
@@ -152,15 +160,21 @@ class RstegTcpServer:
         id_seq = payload[-32:]
         # Check id seq for retrans signal
         calc_id_seq = hashlib.sha256((self.stego_key + str(pkt[TCP].seq) + str(1)).encode()).digest()
-        if calc_id_seq == id_seq: # Detected signal
+        if calc_id_seq == id_seq:  # Detected signal
             logger.debug('ID-SEQ MATCH')
             logger.debug('TRIGGER SECRET')
             self.rsteg_wait = True
         else:
             self.ack = pkt[TCP].seq + len(pkt[TCP].payload)
             self.seq = pkt[TCP].ack
-            ack = self.ip / TCP(sport=self.sport, dport=self.dport, seq=self.seq, flags='A', ack=self.ack)
+            self.ack_segment[TCP].seq = self.seq
+            self.ack_segment[TCP].ack = self.ack
+            ack = self.ip / self.ack_segment
             self.s.send(ack)
+
+            self.avg_ack_time += (time.time() - self.start_time)
+            self.n_ack += 1
+
             logger.debug('SND -> ACK | DATA-TRANSFER')
 
         # Clean payload
@@ -173,23 +187,20 @@ class RstegTcpServer:
         # Store payload
         self.payload += payload
 
-
-
     def ack_scrt(self, pkt):
         """Extracts secret data and acknowledges back."""
-        secret = bytes(pkt[TCP].payload)
         logger.debug('SCRT RCV')
-        secret = secret[:-2]  # strip compensation code
-        secret = secret.strip(b'/')
-
-        self.secret += secret
-
         self.rsteg_wait = False
         self.ack = pkt[TCP].seq + len(pkt[TCP].payload)
         self.seq = pkt[TCP].ack
         ack = self.ip / TCP(sport=self.sport, dport=self.dport, seq=self.seq, flags='A', ack=self.ack)
         self.s.send(ack)
         logger.debug('SND -> ACK | DATA-TRANSFER')
+
+        secret = bytes(pkt[TCP].payload)
+        secret = secret[:-2]  # strip compensation code
+        secret = secret.strip(b'/')
+        self.secret += secret
 
     def rst(self, pkt):
         """Build and send a RST packet to non existing connection."""
@@ -205,6 +216,9 @@ class RstegTcpServer:
         open('secret.jpg', 'wb').write(self.secret)
         print('Secret: ' + str(len(self.secret)))
         logger.debug('Secret saved to disk')
+
+        print('ACK process time: ' + str(self.avg_ack_time / self.n_ack))
+
         self.state = State.LISTEN
         print('LISTEN')
         self.rsteg_wait = False
@@ -228,6 +242,7 @@ if __name__ == '__main__':
     print('Created TCP server on PORT ' + str(SPORT))
     # Create a Layer 3 RawSocket from where we'll sniff packets
     socket = L3RawSocket()
+    conf.recv_poll_rate = 0.001
 
     while True:
         # Sniff IP datagram
