@@ -6,7 +6,22 @@ import ipaddress
 from scapy.all import *
 import random
 from multiprocessing import Pool
-import concurrent.futures
+from enum import Enum
+
+
+class State(Enum):
+    """TCP states as defined in the RFC 793."""
+    CLOSED = 1
+    LISTEN = 2
+    ESTAB = 3
+    SYN_RCVD = 4
+    SYN_SENT = 5
+    CLOSE_WAIT = 6
+    LAST_ACK = 7
+    FIN_WAIT1 = 8
+    FIN_WAIT2 = 9
+    CLOSING = 10
+    TIME_WAIT = 11
 
 
 def is_ipv4(string):

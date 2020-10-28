@@ -10,6 +10,7 @@ for the selected SPORT:
 
 from scapy.all import *
 from scapy.layers.inet import IP, TCP
+
 from utils import is_ipv4, retrans_prob, find_chk_collision, find_compensation
 import PySimpleGUIQt as sg
 import logging
