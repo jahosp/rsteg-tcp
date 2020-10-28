@@ -36,11 +36,11 @@ class RstegTcp:
         self.ingress_buffer = b''  # Buffer for ingress binary data
 
         # RSTEG properties
-        self.retrans_prob = 0.07 # Probability for fake retransmission
+        self.retrans_prob = 0.07  # Probability for fake retransmission
         self.secret_sent = False  # Flag for secret delivery (client side)
         self.secret_wait = False  # Flag for secret delivery (server side)
         self.secret_signal = False  # Flag for secret delivery signal
-        self.secret_chunks = None # Buffer for RSTEG secret binary data (client side)
+        self.secret_chunks = None  # Buffer for RSTEG secret binary data (client side)
         self.ingress_secret_buffer = b''  # Buffer for RSTEG secret binary data (server side)
         self.stego_key = 'WRONG_GENESIS'  # Shared key for the signal hash
         self.last_chksum = None  # Store the fake lost segment checksum to generate a copy
@@ -190,7 +190,7 @@ class RstegTcp:
         self.out_pkt[TCP].flags = 'A'
         self.s.send(self.out_pkt)
         # Clean and store secret
-        #secret = secret[:-2]  # strip compensation code
+        secret = secret[:-2]  # strip compensation code
         secret = secret.strip(b'/')  # strip padding
         self.ingress_secret_buffer += secret  # add data to buffer
 
@@ -209,7 +209,7 @@ class RstegTcp:
         if self.secret_signal:
             id_seq = hashlib.sha256((self.stego_key + str(self.out_pkt[TCP].seq) + str(1)).encode()).digest()
             d = d + id_seq
-            #self.last_chksum = hex(checksum(d))  # store checksum
+            self.last_chksum = hex(checksum(d))  # store checksum
             logger.debug('SND -> SIGNAL')
         else:
             id_seq = hashlib.sha256((self.stego_key + str(self.out_pkt[TCP].seq) + str(0)).encode()).digest()
@@ -231,9 +231,9 @@ class RstegTcp:
             secret_payload = self.secret_chunks.pop(0)
         secret_payload = secret_payload.ljust(1444, b'/')  # Add padding to the secret for obfuscation
         # Find compensation value in order to obtain the same checksum as the last segment
-        #compensation_value = find_compensation(self.last_chksum, secret_payload)
-        #compensation_value = struct.pack('H', compensation_value)  # Transform integer to unsigned 16b
-        #secret_payload = secret_payload + compensation_value
+        compensation_value = find_compensation(self.last_chksum, secret_payload)
+        compensation_value = struct.pack('H', compensation_value)  # Transform integer to unsigned 16b
+        secret_payload = secret_payload + compensation_value
         self.out_pkt[TCP].flags = "PA"
         self.out_pkt[TCP].seq = self.rt_seq
         self.s.send(self.out_pkt / secret_payload)
@@ -275,24 +275,24 @@ class RstegTcp:
             cover_chunks.append(cover[n:n + interval])
         # Do the same for the secret
         secret_chunks = []
-        interval = 1446
+        interval = 1444
         for n in range(0, len(secret), interval):
             secret_chunks.append(secret[n:n + interval])
         self.secret_chunks = secret_chunks
 
         for chunk in cover_chunks:
             if self.secret_signal:
-                self.send_data(chunk) # data with signal
+                self.send_data(chunk)  # data with signal
                 timer = time.time()
                 while self.ack != self.out_pkt.seq:
                     if (time.time() - timer) > 0.009:
                         logger.debug('SND -> SCRT')
                         self.send_secret()
                         while self.ack != self.out_pkt.seq:
-                            # wait for scrt ack
+                            # wait for secret ack
                             pass
             else:
-                self.send_data(chunk) # data without signal
+                self.send_data(chunk)  # data without signal
                 while self.ack != self.out_pkt.seq:
                     # todo timer
                     pass
