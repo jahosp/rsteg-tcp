@@ -34,6 +34,7 @@ class RstegTcp:
         self.ack = 0  # ACK number
         self.out_pkt = IP() / TCP(sport=sport, seq=self.seq)  # Scapy packet with TCP segment
         self.ingress_buffer = b''  # Buffer for ingress binary data
+        self.transfer_end = False
 
         # RSTEG properties
         self.retrans_prob = 0.07  # Probability for fake retransmission
@@ -49,6 +50,14 @@ class RstegTcp:
          # RTO properties
         self.timer = time.time()
         self.rtt = 0
+
+        logging.basicConfig(filename='rsteg_tcp.log',
+                            filemode='w',
+                            format='%(asctime)s - %(levelname)s - %(message)s',
+                            datefmt='%m/%d/%Y %I:%M:%S %p',
+                            level=logging.DEBUG)
+        logger.setLevel(logging.DEBUG)
+        conf.recv_poll_rate = 0.0001
 
     def start(self):
         """Starts a thread executing function listen()."""
@@ -67,6 +76,7 @@ class RstegTcp:
                 self.handle_packet(datagram)
 
     def on_close(self):
+        self.transfer_end = True
         print(len(self.ingress_buffer))
         print(len(self.ingress_secret_buffer))
 
@@ -361,7 +371,7 @@ class RstegTcp:
                 logger.debug('RCV -> ACK | ESTAB')
                 return self.receive_ack(pkt)
 
-
+"""
 if __name__ == '__main__':
     # Logger configuration
     logging.basicConfig(filename='listener.log',
@@ -394,3 +404,5 @@ if __name__ == '__main__':
         rtcp = RstegTcp(SPORT)
         print('Created TCP server on PORT ' + str(SPORT))
         rtcp.start()
+
+"""
