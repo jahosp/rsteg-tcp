@@ -26,9 +26,10 @@ secret_data = open('/home/jahos/TFG/payloads/payload.gif', 'rb').read()
 s = RstegSocket()
 s.connect(HOST, DPORT)
 print('RSTEG-TCP Client connected to ' + HOST + ' on port ' + str(DPORT))
-# s.send('Hemlo')  # normal send
+# s.send('Hello')  # normal send
+print('Sending cover data and secret...')
 s.rsend(cover_data, secret_data)  # sneaky send
-print('DATA SENT')
+print('Data transfer ended.')
 s.close()
 print('Closing connection.')
 

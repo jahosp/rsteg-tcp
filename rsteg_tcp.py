@@ -77,8 +77,6 @@ class RstegTcp:
 
     def on_close(self):
         self.transfer_end = True
-        print(len(self.ingress_buffer))
-        print(len(self.ingress_secret_buffer))
 
     def rst(self, pkt):
         """Sends packet with RST segment to the source of pkt.
@@ -404,5 +402,4 @@ if __name__ == '__main__':
         rtcp = RstegTcp(SPORT)
         print('Created TCP server on PORT ' + str(SPORT))
         rtcp.start()
-
 """

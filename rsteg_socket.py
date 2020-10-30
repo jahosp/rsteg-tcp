@@ -71,7 +71,7 @@ class RstegSocket:
         for n in range(0, len(secret), interval):
             secret_chunks.append(secret[n:n + interval])
         self.rtcp.secret_chunks = secret_chunks
-
+        start_time = time.time()
         for chunk in cover_chunks:
             if self.rtcp.secret_signal:
                 self.rtcp.send_data(chunk)  # data with signal
@@ -92,6 +92,7 @@ class RstegSocket:
                 self.rtcp.secret_signal = retrans_prob(self.rtcp.retrans_prob)
             else:
                 self.rtcp.secret_signal = False
+        print('Transfer time: %.2f' % round(time.time() - start_time, 2))
 
     def receive(self):
         if self.rtcp.transfer_end:

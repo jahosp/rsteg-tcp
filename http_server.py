@@ -27,6 +27,14 @@ print('RSTEG-TCP Server listening on port ' + str(PORT))
 s.accept()
 while s.listening:
     data = s.receive()
-print(data)
+
+if len(data) > 1: # cover with secret
+    open('payload.gif', 'wb').write(data[0])
+    print('Cover bytes received: ' + str(len(data[0])))
+    open('secret.jpg', 'wb').write(data[1])
+    print('Secret bytes received: ' + str(len(data[1])))
+else:  # regular data
+    open('payload.gif', 'wb').write(data[0])
+    print('Cover bytes received: ' + str(len(data[0])))
 
 
