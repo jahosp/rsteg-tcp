@@ -35,6 +35,7 @@ class RstegTcp:
         self.seq = random.randrange(0, 2 ** 32)  # Sequence number
         self.ack = 0  # ACK number
         self.ack_flag = False
+        self.ack_event = threading.Event()
         self.out_pkt = IP() / TCP(sport=sport, seq=self.seq)  # Scapy packet with TCP segment
         self.ingress_buffer = b''  # Buffer for ingress binary data
         self.transfer_end = False
@@ -132,7 +133,8 @@ class RstegTcp:
         logger.debug('SND -> FIN | FIN_WAIT1')
         self.state = State.FIN_WAIT1
         self.out_pkt[TCP].flags = 'F'
-        self.s.send(self.out_pkt)
+        #self.s.send(self.out_pkt)
+        self.s.outs.sendto(bytes(self.out_pkt), (self.out_pkt[IP].dst, 0))
 
     def last_ack(self, pkt):
         """Sends packet with the last ACK segment of the connection.
@@ -143,7 +145,8 @@ class RstegTcp:
         self.out_pkt[TCP].flags = 'A'
         self.out_pkt[TCP].ack = pkt[TCP].seq + 1
         self.out_pkt[TCP].seq = pkt[TCP].ack
-        self.s.send(self.out_pkt)
+        #self.s.send(self.out_pkt)
+        self.s.outs.sendto(bytes(self.out_pkt), (self.out_pkt[IP].dst, 0))
 
         # TODO timer for time_wait
         time.sleep(0.1)
@@ -159,7 +162,8 @@ class RstegTcp:
         self.out_pkt[TCP].flags = 'FA'
         self.out_pkt[TCP].ack = pkt[TCP].seq + 1
         self.out_pkt[TCP].seq = pkt[TCP].ack
-        self.s.send(self.out_pkt)
+        #self.s.send(self.out_pkt)
+        self.s.outs.sendto(bytes(self.out_pkt), (self.out_pkt[IP].dst, 0))
 
     def receive_data(self, pkt):
         """Extracts payload from PSH segment and ACK back.
@@ -167,9 +171,10 @@ class RstegTcp:
         """
         logger.debug('INGRESS DATA')
         # Extract data
-        d = bytes(pkt[TCP].payload)
+        #d = bytes(pkt[TCP].payload)
         # Extract IS
-        id_seq = d[-32:]
+        #id_seq = d[-32:]
+        id_seq = bytes(pkt[TCP].payload)[-32:]
         # Check id seq for retrans signal
         calc_id_seq = hashlib.sha256((self.stego_key + str(pkt[TCP].seq) + str(1)).encode()).digest()
         if calc_id_seq == id_seq:
@@ -178,10 +183,12 @@ class RstegTcp:
             logger.debug('IS MATCH - TRIGGER RETRANS')
         else:
             self.out_pkt[TCP].seq = pkt[TCP].ack
-            self.out_pkt[TCP].ack += len(d)
+            self.out_pkt[TCP].ack += len(pkt[TCP].payload)
             self.out_pkt[TCP].flags = 'A'
-            self.s.send(self.out_pkt)
+            #self.s.send(self.out_pkt) ? slower
+            self.s.outs.sendto(bytes(self.out_pkt), (self.out_pkt[IP].dst, 0))
         # Clean payload from IS
+        d = bytes(pkt[TCP].payload)
         d = d[:-32]
         # Add data to buffer
         self.ingress_buffer += d
@@ -202,7 +209,8 @@ class RstegTcp:
         self.out_pkt[TCP].seq = pkt[TCP].ack
         self.out_pkt[TCP].ack += len(secret)
         self.out_pkt[TCP].flags = 'A'
-        self.s.send(self.out_pkt)
+        #self.s.send(self.out_pkt)
+        self.s.outs.sendto(bytes(self.out_pkt), (self.out_pkt[IP].dst, 0))
         # Clean and store secret
         secret = secret[:-2]  # strip compensation code
         secret = secret.strip(b'/')  # strip padding
@@ -231,7 +239,8 @@ class RstegTcp:
             logger.debug('SND -> PSH')
 
         self.ack_flag = False
-        self.s.send(self.out_pkt / d)
+        #self.s.send(self.out_pkt / d)
+        self.s.outs.sendto(bytes(self.out_pkt / d), (self.out_pkt[IP].dst, 0))
         self.rt_seq = self.out_pkt.seq
         self.out_pkt.seq += len(d)
 
@@ -252,7 +261,8 @@ class RstegTcp:
         self.out_pkt[TCP].flags = "PA"
         self.out_pkt[TCP].seq = self.rt_seq
         self.ack_flag = False
-        self.s.send(self.out_pkt / secret_payload)
+        #self.s.send(self.out_pkt / secret_payload)
+        self.s.outs.sendto(bytes(self.out_pkt / secret_payload), (self.out_pkt[IP].dst, 0))
         self.out_pkt[TCP].seq += len(secret_payload)
 
     def receive_ack(self, pkt):
@@ -260,6 +270,9 @@ class RstegTcp:
         # self.rtt = time.time() - self.timer
         self.ack = pkt[TCP].ack
         self.ack_flag = True
+        if self.ack_event.is_set():
+            self.ack_event.clear()
+        self.ack_event.set()
 
     def send(self, d):
         """Chunks the data to transmit according to the MSS and sends it to the TCP receiver
@@ -297,26 +310,25 @@ class RstegTcp:
             secret_chunks.append(secret[n:n + interval])
         self.secret_chunks = secret_chunks
 
+        # Send cover
         for chunk in cover_chunks:
+            # Send cover signal and secret
             if self.secret_signal:
                 self.send_data(chunk)  # data with signal
                 timer = time.time()
-                #while self.ack != self.out_pkt.seq:
                 while not self.ack_flag:
-                    #if (time.time() - timer) > 0.0001:
+                    if (time.time() - timer) > 0.005:
                         logger.debug('SND -> SCRT')
                         self.send_secret()
-                        #while self.ack != self.out_pkt.seq:
-                        while not self.ack_flag:
-                            # wait for secret ack
-                            pass
+                        self.ack_event.wait()
+                        self.ack_event.clear()  # clear ack event
+            # Send cover
             else:
                 self.send_data(chunk)  # data without signal
-                #while self.ack != self.out_pkt.seq:
-                while not self.ack_flag:
-                    # todo timer
-                    pass
+                self.ack_event.wait()  # wait for ack event
+                self.ack_event.clear()  # clear ack event
 
+            # Update secret_signal flag according to the retrans_prob except if the secret has been sent.
             if not self.secret_sent:
                 self.secret_signal = retrans_prob(self.retrans_prob)
             else:
@@ -329,6 +341,23 @@ class RstegTcp:
         :param pkt: recv packet
         """
         flag = pkt[TCP].flags  # incoming packet flag
+
+        if self.state == State.ESTAB:
+            if flag & 0x01:  # FIN
+                logger.debug('RCV -> FIN | CLOSE_WAIT')
+                self.state = State.CLOSE_WAIT
+                return self.ack_fin(pkt)
+            if flag & 0x08:  # PSH
+                self.start_time = time.time()
+                if self.secret_wait:
+                    logger.debug('RCV -> SCRT')
+                    return self.receive_secret(pkt)
+                else:
+                    logger.debug('RCV -> PSH | ESTAB')
+                    return self.receive_data(pkt)
+            if flag & 0x10:  # ACK
+                logger.debug('RCV -> ACK | ESTAB')
+                return self.receive_ack(pkt)
 
         if self.state == State.LISTEN:
             if flag & 0x02:  # SYN
@@ -366,22 +395,7 @@ class RstegTcp:
             if flag & 0x11:  # FIN/ACK
                 logger.debug('RCV -> FIN/ACK')
 
-        if self.state == State.ESTAB:
-            if flag & 0x01:  # FIN
-                logger.debug('RCV -> FIN | CLOSE_WAIT')
-                self.state = State.CLOSE_WAIT
-                return self.ack_fin(pkt)
-            if flag & 0x08:  # PSH
-                self.start_time = time.time()
-                if self.secret_wait:
-                    logger.debug('RCV -> SCRT')
-                    return self.receive_secret(pkt)
-                else:
-                    logger.debug('RCV -> PSH | ESTAB')
-                    return self.receive_data(pkt)
-            if flag & 0x10:  # ACK
-                logger.debug('RCV -> ACK | ESTAB')
-                return self.receive_ack(pkt)
+
 
 
 if __name__ == '__main__':
