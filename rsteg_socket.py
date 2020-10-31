@@ -1,9 +1,11 @@
 #!/usr/bin/python3
 # -*- coding: UTF-8 -*-
 # Author: jahos@protonmail.com
+from scapy.layers.inet import TCP
 
 from rsteg_tcp import RstegTcp
 from utils import State, retrans_prob
+from scapy.all import *
 import threading
 import time
 
@@ -16,7 +18,7 @@ class RstegSocket:
         self.dport = dport  # Destination port
         self.dst = host  # Destination host
         self.rtcp = RstegTcp(self.sport)  # Rsteg_Tcp instance
-        self.th = None
+        self.listen_thread = None
         # Flags
         self.listening = False  # Socket is listening on sport
 
@@ -30,13 +32,27 @@ class RstegSocket:
         self.rtcp.sport = self.sport
 
     def listen(self):
-        self.th = threading.Thread(target=self.rtcp.start)
-        self.th.start()
+        # self.th = multiprocessing.Process(target=self.rtcp.start)
+        # self.th = threading.Thread(target=self.rtcp.start)
+        # self.th.start()
+        #self.rtcp.start()
+        self.listen_thread = threading.Thread(target=self.run)
+        self.listen_thread.start()
         self.listening = True
+
+    def run(self):
+        """Sniffs recv TCP segments on sport until flag 'run' is set to False."""
+        t = threading.currentThread()
+        while getattr(t, 'run', True):
+            # Sniff IP datagram
+            datagram = self.rtcp.s.recv(MTU)
+            # Check if it's a TCP ACK and is destination is our listening port
+            if datagram.haslayer(TCP) and datagram[TCP].dport == self.sport:
+                self.rtcp.handle_packet(datagram)
 
     def connect(self, host, port):
         if not self.listening:
-            self.rtcp.start()
+            self.listen()
         self.rtcp.connect(host, port)
         while self.rtcp.state != State.ESTAB:
             pass
@@ -76,10 +92,10 @@ class RstegSocket:
             if self.rtcp.secret_signal:
                 self.rtcp.send_data(chunk)  # data with signal
                 timer = time.time()
-                while self.rtcp.ack != self.rtcp.out_pkt.seq:
-                    if (time.time() - timer) > 0.009:
+                while not self.rtcp.ack_flag :
+                    if (time.time() - timer) > 0.02:
                         self.rtcp.send_secret()
-                        while self.rtcp.ack != self.rtcp.out_pkt.seq:
+                        while not self.rtcp.ack_flag:
                             # wait for secret ack
                             pass
             else:
@@ -100,9 +116,13 @@ class RstegSocket:
             if len(self.rtcp.ingress_secret_buffer) > 0:
                 recv_data.append(self.rtcp.ingress_secret_buffer)
             self.listening = False
+            self.listen_thread.run = False
         else:
             recv_data = None
         return recv_data
 
     def close(self):
         self.rtcp.close()
+        while self.rtcp.state != State.TIME_WAIT:
+            pass
+        self.listen_thread.run = False

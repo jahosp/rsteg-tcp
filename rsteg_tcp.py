@@ -8,12 +8,14 @@ for the selected SPORT:
 
 """
 
-from utils import State, find_compensation, retrans_prob
-from scapy.all import *
-from scapy.layers.inet import TCP, IP
+import hashlib
 import logging
 import threading
-import hashlib
+
+from scapy.all import *
+from scapy.layers.inet import TCP, IP
+
+from utils import State, find_compensation, retrans_prob
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +34,7 @@ class RstegTcp:
         self.state = State.LISTEN  # TCP State
         self.seq = random.randrange(0, 2 ** 32)  # Sequence number
         self.ack = 0  # ACK number
+        self.ack_flag = False
         self.out_pkt = IP() / TCP(sport=sport, seq=self.seq)  # Scapy packet with TCP segment
         self.ingress_buffer = b''  # Buffer for ingress binary data
         self.transfer_end = False
@@ -44,12 +47,13 @@ class RstegTcp:
         self.secret_chunks = None  # Buffer for RSTEG secret binary data (client side)
         self.ingress_secret_buffer = b''  # Buffer for RSTEG secret binary data (server side)
         self.stego_key = 'WRONG_GENESIS'  # Shared key for the signal hash
-        self.last_chksum = None  # Store the fake lost segment checksum to generate a copy
+        self.last_payload = None  # Store the payload of the signal segment (for the next checksum)
         self.rt_seq = 0
 
          # RTO properties
         self.timer = time.time()
         self.rtt = 0
+        self.start_time = 0
 
         logging.basicConfig(filename='rsteg_tcp.log',
                             filemode='w',
@@ -143,6 +147,7 @@ class RstegTcp:
 
         # TODO timer for time_wait
         time.sleep(0.1)
+        # self.listen_thread.terminate()
         self.listen_thread.run = False
 
     def ack_fin(self, pkt):
@@ -176,12 +181,13 @@ class RstegTcp:
             self.out_pkt[TCP].ack += len(d)
             self.out_pkt[TCP].flags = 'A'
             self.s.send(self.out_pkt)
-
         # Clean payload from IS
         d = d[:-32]
         # Add data to buffer
         self.ingress_buffer += d
         logger.debug('DATA RCV')
+
+
 
     def receive_secret(self, pkt):
         """Extracts secret from retransmitted PSH segment and ACK back.
@@ -217,13 +223,14 @@ class RstegTcp:
         if self.secret_signal:
             id_seq = hashlib.sha256((self.stego_key + str(self.out_pkt[TCP].seq) + str(1)).encode()).digest()
             d = d + id_seq
-            self.last_chksum = hex(checksum(d))  # store checksum
+            self.last_payload = d
             logger.debug('SND -> SIGNAL')
         else:
             id_seq = hashlib.sha256((self.stego_key + str(self.out_pkt[TCP].seq) + str(0)).encode()).digest()
             d = d + id_seq
             logger.debug('SND -> PSH')
 
+        self.ack_flag = False
         self.s.send(self.out_pkt / d)
         self.rt_seq = self.out_pkt.seq
         self.out_pkt.seq += len(d)
@@ -239,11 +246,12 @@ class RstegTcp:
             secret_payload = self.secret_chunks.pop(0)
         secret_payload = secret_payload.ljust(1444, b'/')  # Add padding to the secret for obfuscation
         # Find compensation value in order to obtain the same checksum as the last segment
-        compensation_value = find_compensation(self.last_chksum, secret_payload)
+        compensation_value = find_compensation(self.last_payload, secret_payload)
         compensation_value = struct.pack('H', compensation_value)  # Transform integer to unsigned 16b
         secret_payload = secret_payload + compensation_value
         self.out_pkt[TCP].flags = "PA"
         self.out_pkt[TCP].seq = self.rt_seq
+        self.ack_flag = False
         self.s.send(self.out_pkt / secret_payload)
         self.out_pkt[TCP].seq += len(secret_payload)
 
@@ -251,6 +259,7 @@ class RstegTcp:
         """Updates RTT timer and ack number."""
         # self.rtt = time.time() - self.timer
         self.ack = pkt[TCP].ack
+        self.ack_flag = True
 
     def send(self, d):
         """Chunks the data to transmit according to the MSS and sends it to the TCP receiver
@@ -292,16 +301,19 @@ class RstegTcp:
             if self.secret_signal:
                 self.send_data(chunk)  # data with signal
                 timer = time.time()
-                while self.ack != self.out_pkt.seq:
-                    if (time.time() - timer) > 0.009:
+                #while self.ack != self.out_pkt.seq:
+                while not self.ack_flag:
+                    #if (time.time() - timer) > 0.0001:
                         logger.debug('SND -> SCRT')
                         self.send_secret()
-                        while self.ack != self.out_pkt.seq:
+                        #while self.ack != self.out_pkt.seq:
+                        while not self.ack_flag:
                             # wait for secret ack
                             pass
             else:
                 self.send_data(chunk)  # data without signal
-                while self.ack != self.out_pkt.seq:
+                #while self.ack != self.out_pkt.seq:
+                while not self.ack_flag:
                     # todo timer
                     pass
 
@@ -347,6 +359,7 @@ class RstegTcp:
                 logger.debug('RCV -> LAST_ACK')
                 self.state = State.CLOSED
                 self.listen_thread.run = False
+                # self.listen_thread.terminate()
                 self.on_close()
 
         if self.state == State.CLOSE_WAIT:
@@ -359,6 +372,7 @@ class RstegTcp:
                 self.state = State.CLOSE_WAIT
                 return self.ack_fin(pkt)
             if flag & 0x08:  # PSH
+                self.start_time = time.time()
                 if self.secret_wait:
                     logger.debug('RCV -> SCRT')
                     return self.receive_secret(pkt)
@@ -369,7 +383,7 @@ class RstegTcp:
                 logger.debug('RCV -> ACK | ESTAB')
                 return self.receive_ack(pkt)
 
-"""
+
 if __name__ == '__main__':
     # Logger configuration
     logging.basicConfig(filename='listener.log',
@@ -383,7 +397,7 @@ if __name__ == '__main__':
     conf.recv_poll_rate = 0.0001
 
     if client:
-        SPORT = 49152
+        SPORT = 49512
         data = open('/home/jahos/TFG/payloads/payload.jpeg', 'rb').read()
         scrt = open('/home/jahos/TFG/payloads/payload.gif', 'rb').read()
         rtcp = RstegTcp(SPORT)
@@ -402,4 +416,3 @@ if __name__ == '__main__':
         rtcp = RstegTcp(SPORT)
         print('Created TCP server on PORT ' + str(SPORT))
         rtcp.start()
-"""

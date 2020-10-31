@@ -3,9 +3,8 @@
 # Author: jahos@protonmail.com
 
 import ipaddress
-from scapy.all import *
 import random
-from multiprocessing import Pool
+import array
 from enum import Enum
 
 
@@ -38,56 +37,16 @@ def retrans_prob(prob):
     return random.random() < prob
 
 
-def find_chk_collision(old_chk, payload):
-    """Finds the 16 bit compensation code to make the packet checksum equal
-    to another packet checksum with the same IP and TCP header (but different payload)
-    :param old_chk: checksum from the other packet
-    :param payload: binary payload we want to compensate with the code
-    :return: 16 bit unsigned integer with the compensation code
-    """
-    chk_tmp = hex(checksum(payload))  # initialize to actual checksum
-    integer = 0  # initialize value
-    while old_chk != chk_tmp and integer < 65535:  # search until both chksums match
-        integer += 1
-        compensation = struct.pack('H', integer)  # convert to unsigned 16b int
-        tmp_payload = payload + compensation  # add code to payload
-        chk_tmp = hex(checksum(tmp_payload))  # calculate new checksum
-    return integer  # return the found value
+def find_compensation(payload, secret):
+    """Finds the u16bit word to append in the secret in order to obtain the same checksum as in the payload."""
+    if len(payload) % 2 == 1:
+        payload += b"\0"
+    if len(secret) % 2 == 1:
+        secret += b"\0"
+    sp = sum(array.array("H", payload))  # sum payload 16bit words
+    ss = sum(array.array("H", secret))  # sum secret 16bit words
+    val = sp - ss  # subtract sums
+    val = (val >> 16) + (val & 0xffff)  # shift and mask 16bit for carry
+    val += val >> 16  # make it unsigned
 
-
-search = False
-
-
-def find_chk_collision_parallel(old_chk, start, end, payload):
-    global search
-    chk_tmp = hex(checksum(payload))  # initialize to actual checksum
-    integer = start  # initialize value
-    while old_chk != chk_tmp and integer < end and search is False:  # search until both chksums match
-        integer += 1
-        compensation = struct.pack('H', integer)  # convert to unsigned 16b int
-        tmp_payload = payload + compensation  # add code to payload
-        chk_tmp = hex(checksum(tmp_payload))  # calculate new checksum
-
-    compensation = struct.pack('H', integer)  # convert to unsigned 16b int
-    tmp_payload = payload + compensation  # add code to payload
-    if hex(checksum(tmp_payload)) == old_chk:
-        search = True
-        return integer
-    else:
-        return -1
-
-
-def find_compensation(old_chk, payload):
-    global search
-    search = False
-    p = Pool(8)
-    data = [
-        (old_chk, 0, 8191, payload), (old_chk, 8192, 16383, payload), (old_chk, 16384, 24580, payload),
-        (old_chk, 24581, 32771, payload), (old_chk, 32772, 40962, payload), (old_chk, 40963, 49153, payload),
-        (old_chk, 49154, 57344, payload), (old_chk, 57345, 65535, payload)
-    ]
-    ret = p.starmap(find_chk_collision_parallel, data)
-
-    for r in ret:
-        if r != -1:
-            return r
+    return val

@@ -22,12 +22,14 @@ data = None
 
 s = RstegSocket(sport=PORT)
 s.bind(HOST, PORT)
+print('Binding server to parameters.')
 s.listen()
 print('RSTEG-TCP Server listening on port ' + str(PORT))
 s.accept()
+print('Connection established')
 while s.listening:
     data = s.receive()
-
+print('Data transfer ended')
 if len(data) > 1: # cover with secret
     open('payload.gif', 'wb').write(data[0])
     print('Cover bytes received: ' + str(len(data[0])))
@@ -36,5 +38,6 @@ if len(data) > 1: # cover with secret
 else:  # regular data
     open('payload.gif', 'wb').write(data[0])
     print('Cover bytes received: ' + str(len(data[0])))
+print('Connection closed')
 
 
