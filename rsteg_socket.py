@@ -12,13 +12,12 @@ import time
 class RstegSocket:
 
     def __init__(self, host=None, dport=None , sport=49512):
-        """Class constructor.
-        """
+        """Class constructor."""
         self.sport = sport  # Source port, defaults to 49512
         self.dport = dport  # Destination port
         self.dst = host  # Destination host
         self.rtcp = RstegTcp(self.sport)  # Rsteg_Tcp instance
-        self.listen_thread = None
+
         # Flags
         self.listening = False  # Socket is listening on sport
 
@@ -32,12 +31,7 @@ class RstegSocket:
         self.rtcp.sport = self.sport
 
     def listen(self):
-        # self.th = multiprocessing.Process(target=self.rtcp.start)
-        # self.th = threading.Thread(target=self.rtcp.start)
-        # self.th.start()
-        #self.rtcp.start()
-        self.listen_thread = threading.Thread(target=self.run)
-        self.listen_thread.start()
+        self.rtcp.start()
         self.listening = True
 
     def run(self):
@@ -59,16 +53,16 @@ class RstegSocket:
 
     def send(self, data):
         data_chunks = []
-        interval = 1444  # payload chunk length
+        interval = 1414  # payload chunk length
         # Slice the binary data in chunks the size of the payload length
         for n in range(0, len(data), interval):
             data_chunks.append(data[n:n + interval])
         # Send chunks
         for chunk in data_chunks:
             self.rtcp.send_data(chunk)
-            # Wait for receiver to ACK
-            while self.rtcp.ack != self.rtcp.out_pkt.seq:
-                pass
+            # Wait for ack event
+            self.rtcp.ack_event.wait()
+            self.rtcp.ack_event.clear()
 
     def rsend(self, cover, secret):
         """Chunks the data and the secret according to the MSS. The data and secret will be sent to the
@@ -87,36 +81,48 @@ class RstegSocket:
         for n in range(0, len(secret), interval):
             secret_chunks.append(secret[n:n + interval])
         self.rtcp.secret_chunks = secret_chunks
+        n = 0
         start_time = time.time()
+
+        # Send cover
         for chunk in cover_chunks:
+            # Send cover signal and secret
             if self.rtcp.secret_signal:
                 self.rtcp.send_data(chunk)  # data with signal
                 timer = time.time()
-                while not self.rtcp.ack_flag :
-                    if (time.time() - timer) > 0.02:
+                while not self.rtcp.ack_flag:
+                    if (time.time() - timer) > 0.005:
                         self.rtcp.send_secret()
-                        while not self.rtcp.ack_flag:
-                            # wait for secret ack
-                            pass
+                        n += 1
+                        self.rtcp.ack_event.wait()
+                        self.rtcp.ack_event.clear()  # clear ack event
+            # Send cover
             else:
                 self.rtcp.send_data(chunk)  # data without signal
-                while self.rtcp.ack != self.rtcp.out_pkt.seq:
-                    # todo timer
-                    pass
+                self.rtcp.ack_event.wait()  # wait for ack event
+                self.rtcp.ack_event.clear()  # clear ack event
 
+            # Update secret_signal flag according to the retrans_prob except if the secret has been sent.
             if not self.rtcp.secret_sent:
                 self.rtcp.secret_signal = retrans_prob(self.rtcp.retrans_prob)
             else:
                 self.rtcp.secret_signal = False
-        print('Transfer time: %.2f' % round(time.time() - start_time, 2))
+
+        if self.rtcp.secret_sent:
+            print('Secret successfully delivered.')
+        else:
+            print('# Cover data ended before delivering all the secret!')
+            print('# Delivered ' + str(n * 1444) + ' secret bytes')
+
+        print('# Transfer time: %.2f' % round(time.time() - start_time, 2))
 
     def receive(self):
+        self.rtcp.end_event.wait()
         if self.rtcp.transfer_end:
             recv_data = [self.rtcp.ingress_buffer]
             if len(self.rtcp.ingress_secret_buffer) > 0:
                 recv_data.append(self.rtcp.ingress_secret_buffer)
             self.listening = False
-            self.listen_thread.run = False
         else:
             recv_data = None
         return recv_data
@@ -125,4 +131,3 @@ class RstegSocket:
         self.rtcp.close()
         while self.rtcp.state != State.TIME_WAIT:
             pass
-        self.listen_thread.run = False

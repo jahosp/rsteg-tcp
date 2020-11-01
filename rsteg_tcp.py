@@ -36,6 +36,7 @@ class RstegTcp:
         self.ack = 0  # ACK number
         self.ack_flag = False
         self.ack_event = threading.Event()
+        self.end_event = threading.Event()
         self.out_pkt = IP() / TCP(sport=sport, seq=self.seq)  # Scapy packet with TCP segment
         self.ingress_buffer = b''  # Buffer for ingress binary data
         self.transfer_end = False
@@ -66,7 +67,6 @@ class RstegTcp:
 
     def start(self):
         """Starts a thread executing function listen()."""
-        # Run listen thread
         self.listen_thread = threading.Thread(target=self.listen)
         self.listen_thread.start()
 
@@ -82,6 +82,7 @@ class RstegTcp:
 
     def on_close(self):
         self.transfer_end = True
+        self.end_event.set()
 
     def rst(self, pkt):
         """Sends packet with RST segment to the source of pkt.
@@ -91,7 +92,8 @@ class RstegTcp:
         self.out_pkt[IP].dst = pkt[IP].dst
         self.out_pkt[TCP].dport = pkt[TCP].dport
         self.out_pkt[TCP].flags = 'RA'
-        self.s.send(self.out_pkt)
+        # self.s.send(self.out_pkt)
+        self.s.outs.sendto(bytes(self.out_pkt), (self.out_pkt[IP].dst, 0))
 
     def connect(self, dst, dport):
         """Sends packet with SYN segment to the target supplied.
@@ -103,7 +105,8 @@ class RstegTcp:
         self.out_pkt[IP].dst = dst
         self.out_pkt[TCP].dport = dport
         self.out_pkt[TCP].flags = 'S'
-        self.s.send(self.out_pkt)
+        # self.s.send(self.out_pkt)
+        self.s.outs.sendto(bytes(self.out_pkt), (dst, 0))
         self.out_pkt[TCP].seq += 1
 
     def send_synack(self, pkt):
@@ -115,7 +118,8 @@ class RstegTcp:
         self.out_pkt[TCP].dport = pkt[TCP].sport
         self.out_pkt[TCP].flags = 'SA'
         self.out_pkt[TCP].ack = pkt[TCP].seq + 1
-        self.s.send(self.out_pkt)
+        # self.s.send(self.out_pkt)
+        self.s.outs.sendto(bytes(self.out_pkt), (self.out_pkt[IP].dst, 0))
 
     def synack_recv(self, pkt):
         """Sends packet with ACK segment in response to the SYN_ACK.
@@ -125,7 +129,8 @@ class RstegTcp:
         logger.debug('SND -> ACK-SYN/ACK')
         self.out_pkt[TCP].ack = pkt[TCP].seq + 1
         self.out_pkt[TCP].flags = 'A'
-        self.s.send(self.out_pkt)
+        # self.s.send(self.out_pkt)
+        self.s.outs.sendto(bytes(self.out_pkt), (self.out_pkt[IP].dst, 0))
         self.state = State.ESTAB
 
     def close(self):
@@ -150,7 +155,6 @@ class RstegTcp:
 
         # TODO timer for time_wait
         time.sleep(0.1)
-        # self.listen_thread.terminate()
         self.listen_thread.run = False
 
     def ack_fin(self, pkt):
@@ -170,10 +174,7 @@ class RstegTcp:
         :param pkt: recv packet
         """
         logger.debug('INGRESS DATA')
-        # Extract data
-        #d = bytes(pkt[TCP].payload)
-        # Extract IS
-        #id_seq = d[-32:]
+        # Extract id_seq
         id_seq = bytes(pkt[TCP].payload)[-32:]
         # Check id seq for retrans signal
         calc_id_seq = hashlib.sha256((self.stego_key + str(pkt[TCP].seq) + str(1)).encode()).digest()
@@ -185,7 +186,6 @@ class RstegTcp:
             self.out_pkt[TCP].seq = pkt[TCP].ack
             self.out_pkt[TCP].ack += len(pkt[TCP].payload)
             self.out_pkt[TCP].flags = 'A'
-            #self.s.send(self.out_pkt) ? slower
             self.s.outs.sendto(bytes(self.out_pkt), (self.out_pkt[IP].dst, 0))
         # Clean payload from IS
         d = bytes(pkt[TCP].payload)
@@ -193,8 +193,6 @@ class RstegTcp:
         # Add data to buffer
         self.ingress_buffer += d
         logger.debug('DATA RCV')
-
-
 
     def receive_secret(self, pkt):
         """Extracts secret from retransmitted PSH segment and ACK back.
@@ -244,8 +242,6 @@ class RstegTcp:
         self.rt_seq = self.out_pkt.seq
         self.out_pkt.seq += len(d)
 
-        # self.timer = time.time()
-
     def send_secret(self):
         """Prepares and sends fake retransmission packet with the secret."""
         if len(self.secret_chunks) == 1:  # Last secret chunk
@@ -279,7 +275,7 @@ class RstegTcp:
         :param d: binary data to transmit
         """
         data_chunks = []
-        interval = 1444  # payload chunk length
+        interval = 1414  # payload chunk length
         # Slice the binary data in chunks the size of the payload length
         for n in range(0, len(d), interval):
             data_chunks.append(d[n:n + interval])
@@ -287,8 +283,8 @@ class RstegTcp:
         for chunk in data_chunks:
             self.send_data(chunk)
             # Wait for receiver to ACK
-            while self.ack != self.out_pkt.seq:
-                pass
+            self.ack_event.wait()
+            self.ack_event.clear()
 
         logger.debug('DATA SENT')
 
@@ -388,7 +384,6 @@ class RstegTcp:
                 logger.debug('RCV -> LAST_ACK')
                 self.state = State.CLOSED
                 self.listen_thread.run = False
-                # self.listen_thread.terminate()
                 self.on_close()
 
         if self.state == State.CLOSE_WAIT:
