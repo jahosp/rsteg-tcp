@@ -2,17 +2,55 @@
 # -*- coding: UTF-8 -*-
 # Author: jahos@protonmail.com
 
-from scapy.layers.http import HTTPResponse
+from scapy.layers.http import HTTPResponse, HTTP
 from rsteg_socket import RstegSocket
 import logging
 
 logger = logging.getLogger(__name__)
 
-def send_res(s, res, host, port):
-    s.connect(host, port)
-    s.send(res)
-    s.close()
+class HttpServer():
+    """A simple HTTP Server using RstegSocket."""
+    def __init__(self, port):
+        """Constructor"""
+        self.s = RstegSocket(sport=port)
+        self.s.bind('', port)
 
+        # GET / response
+        res_data = open('./index.html', 'rb').read()
+        self.res = HTTP() / HTTPResponse(
+            Content_Length=str(len(res_data)).encode(),
+        ) / res_data
+
+    def start(self):
+        """Starts the server and listens for requests."""
+        self.s.listen()
+        print('#####################################')
+        print('# HTTP Server listening on port: ' + str(PORT) + ' #')
+        print('#####################################')
+        logger.debug('Server listening on port: ' + str(PORT))
+        self.s.accept()
+        self.listen()
+
+    def listen(self):
+        """Read the socket for requests and send a response accordingly."""
+        req = b''
+        while True:
+            buf = self.s.recv(1024)
+            if not buf:
+                pass
+            else:
+                req += buf
+
+            if req[:3] == b'GET':
+                print('GET / HTTP 1.1')
+                logger.debug('GET / HTTP 1.1')
+                self.s.send(bytes(self.res))
+                req = b''
+                print('200 OK')
+
+            if self.s.rtcp.end_event.is_set():
+                self.s.listen()
+                self.s.accept()
 
 
 
@@ -27,40 +65,9 @@ if __name__ == '__main__':
 
 HOST = ''
 PORT = 80
-data = None
-
-res = HTTPResponse()
 
 
-s = RstegSocket(sport=PORT)
-s.bind(HOST, PORT)
-s.listen()
-s.accept()
-data = s.receive()
-req = data[0]
-if req[:3] == b'GET':
-    send_res(s, bytes(res), '192.168.1.36', 49152)
-
-
-
-"""
-s.bind(HOST, PORT)
-print('Binding server to parameters.')
-s.listen()
-print('RSTEG-TCP Server listening on port ' + str(PORT))
-s.accept()
-print('Connection established')
-data = s.receive()
-print('Data transfer ended')
-if len(data) > 1: # cover with secret
-    open('payload.jpeg', 'wb').write(data[0])
-    print('Cover bytes received: ' + str(len(data[0])))
-    open('secret.jpg', 'wb').write(data[1])
-    print('Secret bytes received: ' + str(len(data[1])))
-else:  # regular data
-    open('payload.gif', 'wb').write(data[0])
-    print('Cover bytes received: ' + str(len(data[0])))
-print('Connection closed')
-"""
+s = HttpServer(PORT)
+s.start()
 
 

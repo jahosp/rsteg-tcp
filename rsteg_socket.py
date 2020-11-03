@@ -1,50 +1,43 @@
 #!/usr/bin/python3
 # -*- coding: UTF-8 -*-
 # Author: jahos@protonmail.com
-from scapy.layers.inet import TCP
 
 from rsteg_tcp import RstegTcp
 from utils import State, retrans_prob
-from scapy.all import *
-import threading
 import time
 
-class RstegSocket:
 
-    def __init__(self, host=None, dport=None , sport=49512):
+class RstegSocket:
+    """Offers kind of socket primitives for RstegTcp."""
+    def __init__(self, host=None, dport=None, sport=49512):
         """Class constructor."""
         self.sport = sport  # Source port, defaults to 49512
         self.dport = dport  # Destination port
         self.dst = host  # Destination host
         self.rtcp = RstegTcp(self.sport)  # Rsteg_Tcp instance
-
+        self.f_index = 0
         # Flags
         self.listening = False  # Socket is listening on sport
 
-    def accept(self):
-        while self.rtcp.state != State.ESTAB:
-            pass
-
     def bind(self, host, port):
+        """Configures the socket with the parameters supplied."""
         self.dst = host
         self.sport = port
         self.rtcp.sport = self.sport
 
     def listen(self):
+        """Starts the RestegTCP module."""
+        self.rtcp.restart(self.sport)
         self.rtcp.start()
         self.listening = True
 
-    def run(self):
-        """Sniffs recv TCP segments on sport until flag 'run' is set to False."""
-        t = threading.currentThread()
-        while getattr(t, 'run', True):
-            # Sniff IP datagram
-            datagram = self.rtcp.s.recv(MTU)
-            # Check if it's a TCP ACK and is destination is our listening port
-            if datagram.haslayer(TCP) and datagram[TCP].dport == self.sport:
-                self.rtcp.handle_packet(datagram)
+    def accept(self):
+        """Waits for a established TCP connection."""
+        while self.rtcp.state != State.ESTAB:
+            pass
 
     def connect(self, host, port):
+        """Establishes a TCP connection with the host on port."""
         if not self.listening:
             self.listen()
         self.rtcp.connect(host, port)
@@ -52,6 +45,7 @@ class RstegSocket:
             pass
 
     def send(self, data):
+        """Chunks the data according to MSS and sends it to the TCP receiver."""
         data_chunks = []
         interval = 1414  # payload chunk length
         # Slice the binary data in chunks the size of the payload length
@@ -116,18 +110,30 @@ class RstegSocket:
 
         print('# Transfer time: %.2f' % round(time.time() - start_time, 2))
 
-    def receive(self):
-        self.rtcp.end_event.wait()
-        if self.rtcp.transfer_end:
-            recv_data = [self.rtcp.ingress_buffer]
-            if len(self.rtcp.ingress_secret_buffer) > 0:
-                recv_data.append(self.rtcp.ingress_secret_buffer)
-            self.listening = False
-        else:
-            recv_data = None
-        return recv_data
+    def recv(self, size, timeout=0):
+        """Reads the RstegTCP data buffer for new recv data.
+        :param size: integer for the data read size
+        :param timeout: seconds for waiting to new pushed data in the buffer
+        :return:
+        """
+        data = None
+        self.rtcp.psh_event.wait(timeout)
+        self.rtcp.psh_event.clear()
+
+        if len(self.rtcp.ingress_buffer) != 0:  # check if empty
+            if len(self.rtcp.ingress_buffer) <= size:  #
+                data = self.rtcp.ingress_buffer  # take all
+                self.rtcp.ingress_buffer = b''  # clear buffer
+                return data
+            else:
+                data = self.rtcp.ingress_buffer[:size]  # take chunk
+                self.rtcp.ingress_buffer = self.rtcp.ingress_buffer[size:]
+                return data
+        else:  # if buffer is empty return None
+            return data
 
     def close(self):
+        """Closes the TCP stream."""
         self.rtcp.close()
         while self.rtcp.state != State.TIME_WAIT:
             pass

@@ -2,23 +2,27 @@
 # -*- coding: UTF-8 -*-
 # Author: jahos@protonmail.com
 
-from scapy.layers.http import HTTPRequest
+from scapy.layers.http import HTTPRequest, HTTP
 from rsteg_socket import RstegSocket
 import logging
 
 logger = logging.getLogger(__name__)
 
-def send_req(s, req, host):
-    s.connect(host, 80)
-    s.send(req)
-    s.close()
+class HttpClient():
+    """A simple HTTP Client build over RstegSocket."""
+    def __init__(self, port=49512):
+        self.sport = port
+        self.s = RstegSocket(self.sport)
+        self.timeout = 10
 
-def get_res(s):
-    s.listen()
-    s.accept()
-    data = s.receive()
-    return data
+    def request(self, req, host):
+        """Send the request to host and return response."""
+        self.s.connect(host, 80)
+        self.s.send(req)
+        res = self.s.recv(1024, self.timeout)
+        self.s.close()
 
+        return res
 
 if __name__ == '__main__':
     # Logger configuration
@@ -37,7 +41,7 @@ cover_data = open('/home/jahos/TFG/payloads/payload.jpeg', 'rb').read()
 secret_data = open('/home/jahos/TFG/payloads/payload.gif', 'rb').read()
 
 
-req = HTTPRequest(
+req = HTTP() / HTTPRequest(
     Accept_Encoding=b'gzip, deflate',
     Cache_Control=b'no-cache',
     Connection=b'keep-alive',
@@ -45,23 +49,11 @@ req = HTTPRequest(
     Pragma=b'no-cache'
 )
 
-s = RstegSocket()
-send_req(s, bytes(req), HOST)
-data = get_res(s)
-
-
-"""
-s = RstegSocket()
-s.connect(HOST, DPORT)
-print('> RSTEG-TCP Client connected to ' + HOST + ' on port ' + str(DPORT))
-print('> Sending cover data and secret...')
-#s.rsend(cover_data, secret_data)  # sneaky send
-s.send(bytes(req))
-res = s.receive()
-print('> Data transfer ended.')
-s.close()
-print('> Closing connection.')
-"""
-
+c = HttpClient(SPORT)
+res = c.request(bytes(req), HOST)
+if res:
+    print(res.decode())
+else:
+    print('Request timed-out. Server not available.')
 
 
