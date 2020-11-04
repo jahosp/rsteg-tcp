@@ -209,6 +209,7 @@ class RstegTcp:
         # Add data to buffer
         self.ingress_buffer += payload
         self.psh_event.set()
+        self.psh_event.clear()
         logger.debug('DATA RCV')
 
     def receive_secret(self, pkt):

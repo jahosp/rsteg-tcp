@@ -13,7 +13,7 @@ class HttpClient():
     def __init__(self, port=49512):
         self.sport = port
         self.s = RstegSocket(self.sport)
-        self.timeout = 10
+        self.timeout = 5
 
     def request(self, req, host):
         """Send the request to host and return response."""
@@ -39,9 +39,9 @@ SPORT = 49512
 
 cover_data = open('/home/jahos/TFG/payloads/payload.jpeg', 'rb').read()
 secret_data = open('/home/jahos/TFG/payloads/payload.gif', 'rb').read()
+data = open('/home/jahos/TFG/payloads/secret.jpg', 'rb').read()
 
-
-req = HTTP() / HTTPRequest(
+get_req = HTTP() / HTTPRequest(
     Accept_Encoding=b'gzip, deflate',
     Cache_Control=b'no-cache',
     Connection=b'keep-alive',
@@ -49,8 +49,27 @@ req = HTTP() / HTTPRequest(
     Pragma=b'no-cache'
 )
 
+get_req_non = HTTP() / HTTPRequest(
+    Accept_Encoding=b'gzip, deflate',
+    Path=b'/test',
+    Cache_Control=b'no-cache',
+    Connection=b'keep-alive',
+    Host=b'localhost',
+    Pragma=b'no-cache'
+)
+
+post_req = HTTP() / HTTPRequest(
+    Method=b'POST',
+    Path=b'/upload',
+    Host=b'localhost',
+    Connection=b'keep-alive',
+    Content_Length=str(len(data)).encode(),
+    Content_Type=b'image/jpeg'
+) / data
+
+
 c = HttpClient(SPORT)
-res = c.request(bytes(req), HOST)
+res = c.request(bytes(get_req_non), HOST)
 if res:
     print(res.decode())
 else:

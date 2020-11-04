@@ -118,12 +118,11 @@ class RstegSocket:
         """
         data = None
         self.rtcp.psh_event.wait(timeout)
-        self.rtcp.psh_event.clear()
-
         if len(self.rtcp.ingress_buffer) != 0:  # check if empty
             if len(self.rtcp.ingress_buffer) <= size:  #
-                data = self.rtcp.ingress_buffer  # take all
-                self.rtcp.ingress_buffer = b''  # clear buffer
+                length = len(self.rtcp.ingress_buffer)
+                data = self.rtcp.ingress_buffer[:length]  # take chunk
+                self.rtcp.ingress_buffer = self.rtcp.ingress_buffer[length:]
                 return data
             else:
                 data = self.rtcp.ingress_buffer[:size]  # take chunk

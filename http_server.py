@@ -2,7 +2,7 @@
 # -*- coding: UTF-8 -*-
 # Author: jahos@protonmail.com
 
-from scapy.layers.http import HTTPResponse, HTTP
+from scapy.layers.http import HTTPResponse, HTTP, HTTPRequest
 from rsteg_socket import RstegSocket
 import logging
 
@@ -17,9 +17,14 @@ class HttpServer():
 
         # GET / response
         res_data = open('./index.html', 'rb').read()
-        self.res = HTTP() / HTTPResponse(
+        self.res = HTTP() / HTTPResponse()
+        self.index = HTTP() / HTTPResponse(
             Content_Length=str(len(res_data)).encode(),
         ) / res_data
+        self.not_found = HTTP() / HTTPResponse(
+            Status_Code = b'404',
+            Reason_Phrase = b'Not Found'
+        )
 
     def start(self):
         """Starts the server and listens for requests."""
@@ -31,23 +36,47 @@ class HttpServer():
         self.s.accept()
         self.listen()
 
+    def process_request(self, req):
+        if req[HTTPRequest].Method == b'POST':
+            path = req[HTTPRequest].Path
+            version = req[HTTPRequest].Http_Version
+            length = req[HTTPRequest].Content_Length
+            print('POST ' + path.decode() + ' ' + version.decode())
+            data = b''
+            data += bytes(req[HTTPRequest].payload)
+            while len(data) < int(length):
+                buf = self.s.recv(1500)
+                if buf:
+                    data += buf
+                # print(str(len(data)) + ' of ' + str(length))
+            print('RECEIVED ' + str(len(data)) + ' BYTES')
+            open('upload.jpg', 'wb').write(data)
+            self.s.send(bytes(self.res))
+
+
+        if req[HTTPRequest].Method == b'GET':
+            path = req[HTTPRequest].Path
+            version = req[HTTPRequest].Http_Version
+            print('GET ' + path.decode() + ' ' + version.decode())
+            if path == b'/':
+                self.s.send(bytes(self.index))
+                print('200 OK')
+            else:
+                self.s.send(bytes(self.not_found))
+                print('404 NOT FOUND')
+
     def listen(self):
         """Read the socket for requests and send a response accordingly."""
-        req = b''
+        req = self.s.recv(1024)
+        if req:
+            http_req = HTTPRequest(req)
+            self.process_request(http_req)
+
         while True:
-            buf = self.s.recv(1024)
-            if not buf:
-                pass
-            else:
-                req += buf
-
-            if req[:3] == b'GET':
-                print('GET / HTTP 1.1')
-                logger.debug('GET / HTTP 1.1')
-                self.s.send(bytes(self.res))
-                req = b''
-                print('200 OK')
-
+            req = self.s.recv(1024)
+            if req:
+                http_req = HTTPRequest(req)
+                self.process_request(http_req)
             if self.s.rtcp.end_event.is_set():
                 self.s.listen()
                 self.s.accept()
