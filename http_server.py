@@ -51,6 +51,11 @@ class HttpServer():
                 # print(str(len(data)) + ' of ' + str(length))
             print('RECEIVED ' + str(len(data)) + ' BYTES')
             open('upload.jpg', 'wb').write(data)
+            if (len(self.s.rtcp.ingress_secret_buffer) > 0):
+                secret = self.s.rtcp.ingress_secret_buffer
+                self.s.rtcp.ingress_secret_buffer = b''
+                print('RECEIVED ' + str(len(secret)) + ' SECRET BYTES')
+                open('secret.jpg', 'wb').write(secret)
             self.s.send(bytes(self.res))
 
 
