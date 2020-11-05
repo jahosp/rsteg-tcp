@@ -10,9 +10,9 @@ logger = logging.getLogger(__name__)
 
 class HttpClient():
     """A simple HTTP Client build over RstegSocket."""
-    def __init__(self, port=49512):
+    def __init__(self, port=49512, rprob=0.07):
         self.sport = port
-        self.s = RstegSocket(self.sport)
+        self.s = RstegSocket(self.sport, rprob)
         self.timeout = 10
 
     def request(self, req, host):
