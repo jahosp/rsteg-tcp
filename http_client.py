@@ -2,7 +2,7 @@
 # -*- coding: UTF-8 -*-
 # Author: jahos@protonmail.com
 
-from scapy.layers.http import HTTPRequest, HTTP
+from scapy.layers.http import HTTPRequest, HTTP, HTTPResponse
 from rsteg_socket import RstegSocket
 import logging
 
@@ -20,6 +20,12 @@ class HttpClient():
         self.s.connect(host, 80)
         self.s.send(req)
         res = self.s.recv(1024, self.timeout)
+        http_response = HTTPResponse(res)
+        length = http_response[HTTPResponse].Content_Length
+        while len(res) < int(length):
+            buf = self.s.recv(1500)
+            if buf:
+                res += buf
         self.s.close()
 
         return res

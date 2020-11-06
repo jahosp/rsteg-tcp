@@ -7,6 +7,8 @@ from http_client import HttpClient
 from rsteg_socket import RstegSocket
 import matplotlib.pyplot as plt
 import numpy as np
+import os
+import subprocess
 #import PySimpleGUIQt as sg
 import PySimpleGUIQt as sg
 import logging
@@ -35,6 +37,16 @@ def get(host, path):
     window.refresh()
 
     return res
+
+def show_html(res):
+    try:
+        payload = res.split(b'\r\n\r\n')[1].decode()
+        f = open('res.html', 'w')
+        f.write(payload)
+        f.close()
+    except Exception as e:
+        print('Error: ' + str(e))
+    subprocess.Popen(['su', 'jahos', '-c', 'firefox file://' + os.path.realpath('res.html')])
 
 def post(host, path, data):
     cover = open(data, 'rb').read()
@@ -157,7 +169,7 @@ if __name__ == '__main__':
               tcp_frame,
               http_frame,
               [sg.Frame('STATUS LOG', layout=[
-                  [sg.Output(size=(40, 10), key='-OUTPUT-')],
+                  [sg.Output(size=(40, 15), key='-OUTPUT-')],
               ])],
               [sg.Button('Submit'), sg.Button('Clear log')]]
 
@@ -216,7 +228,8 @@ if __name__ == '__main__':
                         host = (o.netloc).split(':')[0]
                         if req_type == 'GET':  # Do HTTP GET
                             res = get(host, path)
-                            sg.popup_scrolled(res.decode(), title='Response', size=(30, 20))
+                            show_html(res)
+                            # sg.popup_scrolled(res.decode(), title='Response', size=(30, 20))
                             window.refresh()
                         else:  # Do HTTP POST
                             if values['http_cover']:

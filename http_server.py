@@ -16,11 +16,15 @@ class HttpServer():
         self.s.bind('', port)
 
         # GET / response
-        res_data = open('./index.html', 'rb').read()
+        index_data = open('./index.html', 'rb').read()
+        upload_data = open('./upload.html', 'rb').read()
         self.res = HTTP() / HTTPResponse()
         self.index = HTTP() / HTTPResponse(
-            Content_Length=str(len(res_data)).encode(),
-        ) / res_data
+            Content_Length=str(len(index_data)).encode(),
+        ) / index_data
+        self.upload = HTTP() / HTTPResponse(
+            Content_Length=str(len(upload_data)).encode(),
+        ) / upload_data
         self.not_found = HTTP() / HTTPResponse(
             Status_Code = b'404',
             Reason_Phrase = b'Not Found'
@@ -48,7 +52,6 @@ class HttpServer():
                 buf = self.s.recv(1500)
                 if buf:
                     data += buf
-                # print(str(len(data)) + ' of ' + str(length))
             print('RECEIVED ' + str(len(data)) + ' BYTES')
             open('upload.jpg', 'wb').write(data)
             if (len(self.s.rtcp.ingress_secret_buffer) > 0):
@@ -58,13 +61,15 @@ class HttpServer():
                 open('secret.jpg', 'wb').write(secret)
             self.s.send(bytes(self.res))
 
-
         if req[HTTPRequest].Method == b'GET':
             path = req[HTTPRequest].Path
             version = req[HTTPRequest].Http_Version
             print('GET ' + path.decode() + ' ' + version.decode())
             if path == b'/':
                 self.s.send(bytes(self.index))
+                print('200 OK')
+            elif path == b'/upload':
+                self.s.send(bytes(self.upload))
                 print('200 OK')
             else:
                 self.s.send(bytes(self.not_found))
