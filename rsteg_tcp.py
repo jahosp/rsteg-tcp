@@ -199,13 +199,14 @@ class RstegTcp:
             # Trigger fake retransmission
             self.secret_wait = True
             logger.debug('IS MATCH - TRIGGER RETRANS')
+            # Clean payload from IS
+            payload = payload[:-32]
         else:
             self.out_pkt[TCP].seq = pkt[TCP].ack
             self.out_pkt[TCP].ack += len(payload)
             self.out_pkt[TCP].flags = 'A'
             self.s.outs.sendto(bytes(self.out_pkt), (self.out_pkt[IP].dst, 0))
-        # Clean payload from IS
-        payload = payload[:-32]
+
         # Add data to buffer
         self.ingress_buffer += payload
         self.psh_event.set()
@@ -249,8 +250,8 @@ class RstegTcp:
             self.last_payload = d
             logger.debug('SND -> SIGNAL')
         else:
-            id_seq = hashlib.sha256((self.stego_key + str(self.out_pkt[TCP].seq) + str(0)).encode()).digest()
-            d = d + id_seq
+            # id_seq = hashlib.sha256((self.stego_key + str(self.out_pkt[TCP].seq) + str(0)).encode()).digest()
+            # d = d + id_seq
             logger.debug('SND -> PSH')
 
         self.ack_flag = False
@@ -260,6 +261,7 @@ class RstegTcp:
 
     def send_secret(self):
         """Prepares and sends fake retransmission packet with the secret."""
+        logger.debug('SND -> SECRET')
         if len(self.secret_chunks) == 1:  # Last secret chunk
             self.secret_sent = True
             secret_payload = self.secret_chunks.pop(0)
@@ -289,7 +291,6 @@ class RstegTcp:
         if self.psh_event.is_set():
             self.psh_event.clear()
 
-        logger.debug('DATA & SECRET SENT')
 
     def handle_packet(self, pkt):
         """Send incoming packet to a handler function according to the current TCP state

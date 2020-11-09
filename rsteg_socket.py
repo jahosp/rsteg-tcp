@@ -47,7 +47,7 @@ class RstegSocket:
     def send(self, data):
         """Chunks the data according to MSS and sends it to the TCP receiver."""
         data_chunks = []
-        interval = 1414  # payload chunk length
+        interval = 1446  # payload chunk length
         # Slice the binary data in chunks the size of the payload length
         for n in range(0, len(data), interval):
             data_chunks.append(data[n:n + interval])
@@ -64,11 +64,7 @@ class RstegSocket:
         :param cover: binary data to transmit as cover
         :param secret: binary data to transmit during fake retransmission
         """
-        cover_chunks = []
-        interval = 1414  # payload chunk length
-        # Slice the binary data in chunks the size of the payload length
-        for n in range(0, len(cover), interval):
-            cover_chunks.append(cover[n:n + interval])
+
         # Do the same for the secret
         secret_chunks = []
         interval = 1444
@@ -79,19 +75,23 @@ class RstegSocket:
         start_time = time.time()
 
         # Send cover
-        for chunk in cover_chunks:
+        while len(cover) > 0:
             # Send cover signal and secret
             if self.rtcp.secret_signal:
+                chunk = cover[:1414]
+                cover = cover[1414:]
                 self.rtcp.send_data(chunk)  # data with signal
                 timer = time.time()
                 while not self.rtcp.ack_flag:
-                    if (time.time() - timer) > 0.005:
+                    if (time.time() - timer) > 0.008:
                         self.rtcp.send_secret()
                         n += 1
                         self.rtcp.ack_event.wait()
                         self.rtcp.ack_event.clear()  # clear ack event
             # Send cover
             else:
+                chunk = cover[:1446]
+                cover = cover[1446:]
                 self.rtcp.send_data(chunk)  # data without signal
                 self.rtcp.ack_event.wait()  # wait for ack event
                 self.rtcp.ack_event.clear()  # clear ack event
