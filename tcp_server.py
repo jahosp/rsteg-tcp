@@ -12,6 +12,9 @@ if __name__ == '__main__':
     print('TCP Rsteg Socket listening on port 80.')
     s.accept()
     print('Connection accepted.')
+    d = s.wait_and_recv()
+
+    """
     data = b''
     while True:
         buf = s.recv(1024)
@@ -26,3 +29,4 @@ if __name__ == '__main__':
             s.listen()
             s.accept()
             print('Connection accepted.')
+    """

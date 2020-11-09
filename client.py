@@ -77,8 +77,7 @@ def rpost(host, path, data, secret_data, rprob):
 
 def tcp_transfer(host, sport, dport, data, secret_data, rprob):
 
-    print(rprob)
-    window.refresh()
+
     cover = open(data, 'rb').read()
     secret = open(secret_data, 'rb').read()
     print('Opening TCP stream at ' + host + ':' + dport)
@@ -88,13 +87,13 @@ def tcp_transfer(host, sport, dport, data, secret_data, rprob):
     print('Connection established.')
     window.refresh()
     start_time = time.time()
-    s.rsend(cover, secret)
+    sec = s.rsend(cover, secret)
     end_time = time.time() - start_time
     print('Data sent, closing connection.')
     window.refresh()
     s.close()
     window.refresh()
-    plot_time(end_time, len(cover), len(secret))
+    plot_time(end_time, len(cover), sec)
 
 def plot_time(time, bytes, secret_bytes):
     try:

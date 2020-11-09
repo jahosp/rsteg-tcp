@@ -8,7 +8,7 @@ import time
 
 
 class RstegSocket:
-    """Offers kind of socket primitives for RstegTcp."""
+    """A wrapper for RstegTcp that offers socket primitives for communicating like Python sockets."""
     def __init__(self, host=None, dport=None, sport=49512, rprob=0.07):
         """Class constructor."""
         self.sport = sport  # Source port, defaults to 49512
@@ -110,6 +110,8 @@ class RstegSocket:
 
         print('# Transfer time: %.2f' % round(time.time() - start_time, 2))
 
+        return (n * 1444)
+
     def recv(self, size, timeout=0):
         """Reads the RstegTCP data buffer for new recv data.
         :param size: integer for the data read size
@@ -130,6 +132,18 @@ class RstegSocket:
                 return data
         else:  # if buffer is empty return None
             return data
+
+    def wait_and_recv(self):
+        """Waits until end_event is set before accessing to the data buffer."""
+        data = []
+        self.rtcp.end_event.wait()
+        if self.rtcp.ingress_buffer:
+            data.append(self.rtcp.ingress_buffer)
+            print('RECV ' + str(len(data[0])) + ' BYTES')
+        if self.rtcp.ingress_secret_buffer:
+            data.append(self.rtcp.ingress_secret_buffer)
+            print('RECV ' + str(len(data[1])) + ' SECRET BYTES')
+        return data
 
     def close(self):
         """Closes the TCP stream."""
