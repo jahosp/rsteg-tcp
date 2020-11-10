@@ -51,12 +51,12 @@ For TCP you'll have to input the server IP, the server port, and the source port
 here you can browse for the cover and secret data. Also you can edit the retransmission probability. 
 
 <p float=left>
- <img align="right" height="400" src="https://user-images.githubusercontent.com/15250664/98659556-83becd00-2344-11eb-8dac-88ca5e6419e1.png">
- <img align="center" height="400" src="https://user-images.githubusercontent.com/15250664/98659584-8e796200-2344-11eb-96b8-19bb0f2c22c3.png">
- <img align="left" height="400" src="https://user-images.githubusercontent.com/15250664/98659748-bf599700-2344-11eb-8775-8334b9bffdb2.png">
+ <img  height="400" src="https://user-images.githubusercontent.com/15250664/98666040-be2c6800-234c-11eb-9039-966bfe37a8e5.png">
+ <img  height="400" src="https://user-images.githubusercontent.com/15250664/98665930-9f2dd600-234c-11eb-8800-468eaeb31771.png">
+ <img  height="400" src="https://user-images.githubusercontent.com/15250664/98666098-d308fb80-234c-11eb-9243-c13a741139b7.png">
 </p>
 
-Both client and servers generate logs in the same folder as you execute them.
+*From left to right: POST request, GET request and response and TCP transfer.*
 
 **NOTE: Unix automatically sends RST packages for Scapy crafted SYN packages. To disable this execute the ```iptables.sh``` 
 script followed by the port number you'll be using (do this for the server and the client).**
