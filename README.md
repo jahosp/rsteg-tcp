@@ -46,9 +46,12 @@ request, a new form will be displayed. Here you can browse your filesystem for t
 also a checkbox to enable or disable the RSTEG method and an input box where you can specify the retransmission probability 
 for RSTEG (defaults to 7%).
 
+The HTTP server only accepts GET and POST requests on the root and /upload paths. 
+
 #### TCP
 For TCP you'll have to input the server IP, the server port, and the source port. In the same way as in the POST request,
-here you can browse for the cover and secret data. Also you can edit the retransmission probability. 
+here you can browse for the cover and secret data. Also you can edit the retransmission probability. After the stream is closed
+the client will show a Matplotlib figure that plots the data transfered, both as cover and in secret. 
 
 <p float=left>
  <img  height="400" src="https://user-images.githubusercontent.com/15250664/98666040-be2c6800-234c-11eb-9039-966bfe37a8e5.png">
@@ -58,17 +61,27 @@ here you can browse for the cover and secret data. Also you can edit the retrans
 
 *From left to right: POST request, GET request and response and TCP transfer.*
 
+Both servers will only save to disk the data received and print the length of the data through the stdout. 
+
 **NOTE: Unix automatically sends RST packages for Scapy crafted SYN packages. To disable this execute the ```iptables.sh``` 
 script followed by the port number you'll be using (do this for the server and the client).**
 
 
 ## Installation
-TBD
-## Contributing
-TBD
+Remember that you'll need Python 3.8.x to run this project and elevated privileges as Scapy need them to send packets. 
 
-## Credits
-TBD
+1. First clone this repo: ```git clone https://github.com/jahosp/rsteg-tcp``` 
+
+2. Go to the project root folder: ```cd rsteg-tcp/``` 
+
+3. Install the dependencies with: ```pip install -r requirements.txt```
+
+4. Now, since Scapy runs in user-space, the Linux kernel will respond with RST to any SYN segment. To avoid this we must 
+firewall the port we want to use with iptables. You can execute the provided ```iptables.sh``` script for this. 
+For example, to open the port 80 for the http server execute: ```sudo sh iptables.sh 80```. Remember to do this both for the server and the client ports.
+
+5. Finally, you can start the client or any of the servers with: ```sudo python3 client.py``` or ```sudo python3 http_server.py```. 
+
 
 ## License 
-GNU GPLv3
+MIT License (See LICENSE.txt)
