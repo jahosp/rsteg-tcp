@@ -20,9 +20,9 @@ In general, RSTEG can be applied to any network protocol that utilises a retrans
  other features related to congestion avoidance are not present here. These would be a very interesting addition.
  
  The following scenario was designed to prove RSTEG in a more real environment using a client and server application:
- <p align="center">
+ <p align="middle">
   <img src="https://user-images.githubusercontent.com/15250664/98651652-d1ced300-233a-11eb-8ec7-b743df3d216b.png">
-</p>
+ </p>
 
 From the bottom up: ```rsteg_tcp.py``` handles the TCP logic as well as the modifications for RSTEG. Meanwhile ```rsteg_socket.py``` offers 
 similar methods to Python sockets (bind, listen, accept, etc.) but using the RstegTcp class. Note that this Socket offers
@@ -46,19 +46,14 @@ request, a new form will be displayed. Here you can browse your filesystem for t
 also a checkbox to enable or disable the RSTEG method and an input box where you can specify the retransmission probability 
 for RSTEG (defaults to 7%).
 
-
-<p>
- <img align="right" height="400" src="https://user-images.githubusercontent.com/15250664/98659556-83becd00-2344-11eb-8dac-88ca5e6419e1.png">
- <img align="left" height="400" src="https://user-images.githubusercontent.com/15250664/98659584-8e796200-2344-11eb-96b8-19bb0f2c22c3.png">
-</p>
-<br>
-
 #### TCP
 For TCP you'll have to input the server IP, the server port, and the source port. In the same way as in the POST request,
 here you can browse for the cover and secret data. Also you can edit the retransmission probability. 
 
-<p>
- <img align="center" height="400" src="https://user-images.githubusercontent.com/15250664/98659748-bf599700-2344-11eb-8775-8334b9bffdb2.png">
+<p float=left>
+ <img align="right" height="400" src="https://user-images.githubusercontent.com/15250664/98659556-83becd00-2344-11eb-8dac-88ca5e6419e1.png">
+ <img align="center" height="400" src="https://user-images.githubusercontent.com/15250664/98659584-8e796200-2344-11eb-96b8-19bb0f2c22c3.png">
+ <img align="left" height="400" src="https://user-images.githubusercontent.com/15250664/98659748-bf599700-2344-11eb-8775-8334b9bffdb2.png">
 </p>
 
 Both client and servers generate logs in the same folder as you execute them.
