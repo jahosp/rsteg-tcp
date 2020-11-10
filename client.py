@@ -228,7 +228,7 @@ if __name__ == '__main__':
                         if req_type == 'GET':  # Do HTTP GET
                             res = get(host, path)
                             show_html(res)
-                            # sg.popup_scrolled(res.decode(), title='Response', size=(30, 20))
+                            sg.popup_scrolled(res.decode(), title='Response', size=(30, 20))
                             window.refresh()
                         else:  # Do HTTP POST
                             if values['http_cover']:
