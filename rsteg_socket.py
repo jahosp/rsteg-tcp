@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 # -*- coding: UTF-8 -*-
-# Author: jahos@protonmail.com
+# Author: Javier Hospital <jahos@protonmail.com>
 
 from rsteg_tcp import RstegTcp
 from utils import State, retrans_prob
@@ -110,7 +110,7 @@ class RstegSocket:
 
         print('# Transfer time: %.2f' % round(time.time() - start_time, 2))
 
-        return (n * 1444)
+        return n * 1444
 
     def recv(self, size, timeout=0):
         """Reads the RstegTCP data buffer for new recv data.

@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 # -*- coding: UTF-8 -*-
-# Author: jahos@protonmail.com
+# Author: Javier Hospital <jahos@protonmail.com>
 
 from rsteg_socket import RstegSocket
 import logging
@@ -17,6 +17,7 @@ if __name__ == '__main__':
                         level=logging.DEBUG)
     logger.setLevel(logging.DEBUG)
 
+    # If flag is true the server will wait for a one-way transfer and it won't pull data until the stream is closed.
     wait_flag = False
 
     s = RstegSocket(sport=80)

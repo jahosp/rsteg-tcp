@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 # -*- coding: UTF-8 -*-
-# Author: jahos@protonmail.com
+# Author: Javier Hospital <jahos@protonmail.com>
 
 from scapy.layers.http import HTTPResponse, HTTP, HTTPRequest
 from rsteg_socket import RstegSocket
@@ -8,16 +8,18 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-class HttpServer():
+
+class HttpServer:
     """A simple HTTP Server using RstegSocket."""
     def __init__(self, port):
         """Constructor"""
         self.s = RstegSocket(sport=port)
         self.s.bind('', port)
 
-        # GET / response
+        # Load in memory the html responses
         index_data = open('./index.html', 'rb').read()
         upload_data = open('./upload.html', 'rb').read()
+        # Load the HTTP Response data structure
         self.res = HTTP() / HTTPResponse()
         self.index = HTTP() / HTTPResponse(
             Content_Length=str(len(index_data)).encode(),
@@ -26,8 +28,8 @@ class HttpServer():
             Content_Length=str(len(upload_data)).encode(),
         ) / upload_data
         self.not_found = HTTP() / HTTPResponse(
-            Status_Code = b'404',
-            Reason_Phrase = b'Not Found'
+            Status_Code=b'404',
+            Reason_Phrase=b'Not Found'
         )
 
     def start(self):
@@ -41,6 +43,9 @@ class HttpServer():
         self.listen()
 
     def process_request(self, req):
+        """Process the request and send the proper response back.
+        :param req: HTTP request received from RstegSocket
+        """
         if req[HTTPRequest].Method == b'POST':
             path = req[HTTPRequest].Path
             version = req[HTTPRequest].Http_Version
@@ -54,7 +59,7 @@ class HttpServer():
                     data += buf
             print('RECEIVED ' + str(len(data)) + ' BYTES')
             open('upload.jpg', 'wb').write(data)
-            if (len(self.s.rtcp.ingress_secret_buffer) > 0):
+            if len(self.s.rtcp.ingress_secret_buffer) > 0:
                 secret = self.s.rtcp.ingress_secret_buffer
                 self.s.rtcp.ingress_secret_buffer = b''
                 print('RECEIVED ' + str(len(secret)) + ' SECRET BYTES')
@@ -76,7 +81,7 @@ class HttpServer():
                 print('404 NOT FOUND')
 
     def listen(self):
-        """Read the socket for requests and send a response accordingly."""
+        """Poll the socket for requests, process them and send a response accordingly."""
         req = self.s.recv(1024)
         if req:
             http_req = HTTPRequest(req)
@@ -92,7 +97,6 @@ class HttpServer():
                 self.s.accept()
 
 
-
 if __name__ == '__main__':
     # Logger configuration
     logging.basicConfig(filename='http_server.log',
@@ -105,8 +109,5 @@ if __name__ == '__main__':
 HOST = ''
 PORT = 80
 
-
 s = HttpServer(PORT)
 s.start()
-
-

@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 # -*- coding: UTF-8 -*-
-# Author: jahos@protonmail.com
+# Author: Javier Hospital <jahos@protonmail.com>
 
 """ATTENTION: linux sends an RST for crafted SYN packets. Execute the following to disable this behaviour
 for the selected SPORT:
@@ -290,7 +290,6 @@ class RstegTcp:
 
         if self.psh_event.is_set():
             self.psh_event.clear()
-
 
     def handle_packet(self, pkt):
         """Send incoming packet to a handler function according to the current TCP state

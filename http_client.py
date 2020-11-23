@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 # -*- coding: UTF-8 -*-
-# Author: jahos@protonmail.com
+# Author: Javier Hospital <jahos@protonmail.com>
 
 from scapy.layers.http import HTTPRequest, HTTP, HTTPResponse
 from rsteg_socket import RstegSocket
@@ -8,15 +8,20 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-class HttpClient():
+
+class HttpClient:
     """A simple HTTP Client build over RstegSocket."""
     def __init__(self, port=49512, rprob=0.07):
         self.sport = port
         self.s = RstegSocket(self.sport, rprob)
-        self.timeout = 10
+        self.timeout = 10  # request timeout (in seconds)
 
     def request(self, req, host):
-        """Send the request to host and return response."""
+        """Send the request to host and return response.
+        :param req: HTTP request
+        :param host: host ip addr
+        :return res: HTTP response
+        """
         self.s.connect(host, 80)
         self.s.send(req)
         res = self.s.recv(1024, self.timeout)
@@ -31,7 +36,12 @@ class HttpClient():
         return res
 
     def rsteg_request(self, req, secret, host):
-        """Send the request to host and return response."""
+        """Send the request using the RSTEG mechanism and return response.
+        :param req: HTTP request
+        :param secret: secret data for RSTEG
+        :param host: host ip addr
+        :return res: HTTP response
+        """
         self.s.connect(host, 80)
         self.s.rsend(req, secret)
         res = self.s.recv(1024, self.timeout)
@@ -39,7 +49,8 @@ class HttpClient():
 
         return res
 
-    def create_post_request(self, host, path, data, content_type ):
+    @staticmethod
+    def create_post_request(host, path, data, content_type):
         post_req = HTTP() / HTTPRequest(
             Method=b'POST',
             Path=path.encode(),
@@ -50,7 +61,8 @@ class HttpClient():
         ) / data
         return post_req
 
-    def create_get_request(self, host, path):
+    @staticmethod
+    def create_get_request(host, path):
         get_req = HTTP() / HTTPRequest(
             Accept_Encoding=b'gzip, deflate',
             Cache_Control=b'no-cache',
@@ -61,6 +73,7 @@ class HttpClient():
         )
         return get_req
 
+
 if __name__ == '__main__':
     # Logger configuration
     logging.basicConfig(filename='http_client.log',
@@ -69,4 +82,3 @@ if __name__ == '__main__':
                         datefmt='%m/%d/%Y %I:%M:%S %p',
                         level=logging.DEBUG)
     logger.setLevel(logging.DEBUG)
-

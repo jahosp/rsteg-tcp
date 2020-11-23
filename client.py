@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 # -*- coding: UTF-8 -*-
-# Author: jahos@protonmail.com
+# Author: Javier Hospital <jahos@protonmail.com>
 import time
 from urllib.parse import urlparse
 from http_client import HttpClient
@@ -9,7 +9,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 import subprocess
-#import PySimpleGUIQt as sg
 import PySimpleGUIQt as sg
 import logging
 import re
@@ -18,14 +17,20 @@ logger = logging.getLogger(__name__)
 
 # Regex for validating URL
 regex = re.compile(
-        r'^(?:http|ftp)s?://' # http:// or https://
-        r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+(?:[A-Z]{2,6}\.?|[A-Z0-9-]{2,}\.?)|' #domain...
-        r'localhost|' #localhost...
-        r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})' # ...or ip
-        r'(?::\d+)?' # optional port
+        r'^(?:http|ftp)s?://'  # http:// or https://
+        r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+(?:[A-Z]{2,6}\.?|[A-Z0-9-]{2,}\.?)|'  # domain...
+        r'localhost|'  # localhost...
+        r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})'  # ...or ip
+        r'(?::\d+)?'  # optional port
         r'(?:/?|[/?]\S+)$', re.IGNORECASE)
 
+
 def get(host, path):
+    """Sends HTTP GET using HttpClient and returns the request response body.
+    :param host: host ip addr
+    :param path: resource endpoint path
+    :return: response body
+    """
     print('Sending GET ' + path + ' HTTP/1.1 request to ' + host)
     window.refresh()
     c = HttpClient(49512)
@@ -38,7 +43,11 @@ def get(host, path):
 
     return res
 
+
 def show_html(res):
+    """Saves the HTTP response in a html file and opens it in firefox as a subprocess.
+    :param res: HTTP response
+    """
     try:
         payload = res.split(b'\r\n\r\n')[1].decode()
         f = open('res.html', 'w')
@@ -46,9 +55,19 @@ def show_html(res):
         f.close()
     except Exception as e:
         print('Error: ' + str(e))
+    # Because the client is running as sudo the usual ways for opening the browser don't work
+    # The only way I found out was opening a subprocess with the following command
+    # (second parameter should be the username)
     subprocess.Popen(['su', 'jahos', '-c', 'firefox file://' + os.path.realpath('res.html')])
 
+
 def post(host, path, data):
+    """Sends POST request using HttpClient and the data from GUI form.
+    :param host: host ip addr
+    :param path: resource endpoint path
+    :param data: data to be sent as body of the POST request
+    :return: HTTP response body
+    """
     cover = open(data, 'rb').read()
     print('Sending POST ' + path + ' HTTP/1.1 request to ' + host)
     window.refresh()
@@ -62,7 +81,16 @@ def post(host, path, data):
 
     return res
 
+
 def rpost(host, path, data, secret_data, rprob):
+    """Sends rPOST request using HttpClient and the data from GUI form.
+    :param host: host ip addr
+    :param path: resource endpoint path
+    :param data: data to be sent as body of the POST request
+    :param secret_data: secret to be sent using the RSTEG mechanism
+    :param rprob: retransmission probability
+    :return: HTTP response body
+    """
     cover = open(data, 'rb').read()
     secret = open(secret_data, 'rb').read()
     print('Sending POST ' + path + ' HTTP/1.1 request to ' + host)
@@ -75,9 +103,17 @@ def rpost(host, path, data, secret_data, rprob):
 
     return res
 
+
 def tcp_transfer(host, sport, dport, data, secret_data, rprob):
-
-
+    """Opens a TCP stream with RstegSocket and transfers data and secret_data using the
+    RSTEG mechanism.
+    :param host: host ip addr
+    :param sport: source port
+    :param dport: destination port
+    :param data: data to be sent
+    :param secret_data: secret for RSTEG mechanism
+    :param rprob: retransmission probability
+    """
     cover = open(data, 'rb').read()
     secret = open(secret_data, 'rb').read()
     print('Opening TCP stream at ' + host + ':' + dport)
@@ -93,9 +129,16 @@ def tcp_transfer(host, sport, dport, data, secret_data, rprob):
     window.refresh()
     s.close()
     window.refresh()
-    plot_time(end_time, len(cover), sec)
+    # Take the comment out if you want to plot time with Matplotlib
+    # plot_time(end_time, len(cover), sec)
+
 
 def plot_time(time, bytes, secret_bytes):
+    """Creates a Figure with Matplotlib that plots the time and bytes sent during the TCP stream.
+    :param time: length of the stream in seconds
+    :param bytes: bytes sent as data
+    :param secret_bytes: bytes sent as secret
+    """
     try:
         bytes_array = np.arange(start=0, stop=bytes, step=(bytes/5))
         time_array = np.arange(start=0, stop=time, step=(time/5))
@@ -127,15 +170,17 @@ if __name__ == '__main__':
     # HTTP Frame Layout
     http_frame = [
         sg.Frame('HTTP Parameters', layout=[
-            [sg.Text('URL :', size=(15,1)), sg.InputText(enable_events=True, key='url')],
-            [sg.Text('Request type: ', size=(15,1)), sg.Combo(values=['GET', 'POST'], default_value='GET', readonly=True,
-                                                              auto_size_text=True, enable_events=True, key='http_request')],
+            [sg.Text('URL :', size=(15, 1)), sg.InputText(enable_events=True, key='url')],
+            [sg.Text('Request type: ', size=(15, 1)), sg.Combo(values=['GET', 'POST'], default_value='GET',
+                                                               readonly=True, auto_size_text=True, enable_events=True,
+                                                               key='http_request')],
             [sg.Frame('Data', layout=[
                 [sg.Text('Cover data', size=(8, 1)), sg.Input(key='http_cover'), sg.FileBrowse()],
                 [sg.Text('Secret data', size=(8, 1)), sg.Input(key='http_secret'), sg.FileBrowse()],
                 [
                     sg.Checkbox('RSTEG', key='rsteg', enable_events=True),
-                    sg.Text('Retransmission probability'), sg.InputText(default_text='0.07', enable_events=True, key='rprob')
+                    sg.Text('Retransmission probability'), sg.InputText(default_text='0.07', enable_events=True,
+                                                                        key='rprob')
                 ]
             ], visible=False, key='post_details')]
         ], visible=False, key='http_frame')]
@@ -147,18 +192,17 @@ if __name__ == '__main__':
             [sg.Text('Destination Port ', size=(15, 1)), sg.InputText(enable_events=True, key='dport',
                                                                       default_text='80')],
             [sg.Text('Source Port ', size=(15, 1)), sg.InputText(enable_events=True, key='sport',
-                                                                      default_text='49512')],
+                                                                 default_text='49512')],
             [sg.Text('Cover data', size=(8, 1)), sg.Input(key='cover'), sg.FileBrowse()],
             [sg.Text('Secret data', size=(8, 1)), sg.Input(key='secret'), sg.FileBrowse()],
             [sg.Text('Retransmission probability'),
              sg.InputText(default_text='0.07', enable_events=True, key='prob')],
         ], visible=False, key='tcp_frame')]
 
-    upper_menu_layout = [['Help', 'About'],]
-
+    upper_menu_layout = [['Help', 'About'], ]
 
     # Application General Layout
-    layout = [ [sg.Menu(upper_menu_layout)],
+    layout = [[sg.Menu(upper_menu_layout)],
 
               [sg.Text('First select which protocol do you want to use: ')],
               [
@@ -177,9 +221,8 @@ if __name__ == '__main__':
         ['About']
     ]
 
-
     # Create the window
-    window = sg.Window('RSTEG TCP', layout, location=(1920/3,1080/3), auto_size_text=14)
+    window = sg.Window('RSTEG TCP', layout, location=(1920/3, 1080/3), auto_size_text=14)
     # Render flags
     http_visible_flag = False
     tcp_visible_flag = False
@@ -224,7 +267,7 @@ if __name__ == '__main__':
                     if re.match(regex, url) is not None:
                         o = urlparse(url)
                         path = o.path
-                        host = (o.netloc).split(':')[0]
+                        host = o.netloc.split(':')[0]
                         if req_type == 'GET':  # Do HTTP GET
                             res = get(host, path)
                             show_html(res)
@@ -266,12 +309,12 @@ if __name__ == '__main__':
                         print('Destination Host IP is not valid.')
 
         if event == 'About':
-            screen_dim= window.GetScreenDimensions()
-            sg.popup('Version 1.0', 'www.github.com/jahosp/rsteg-tcp', title='About', location=(screen_dim[0]/2-30,screen_dim[1]/2-30))
+            screen_dim = window.GetScreenDimensions()
+            sg.popup('Version 1.0', 'www.github.com/jahosp/rsteg-tcp', title='About',
+                     location=(screen_dim[0]/2-30, screen_dim[1]/2-30))
         # Clear log event
         if event == 'Clear log':
             window['-OUTPUT-'].update('')
-
 
     # Remove window from screen
     window.close()
