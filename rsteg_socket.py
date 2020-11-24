@@ -9,11 +9,12 @@ import time
 
 class RstegSocket:
     """A wrapper for RstegTcp that offers socket primitives for communicating like Python sockets."""
-    def __init__(self, host=None, dport=None, sport=49512, rprob=0.07):
+    def __init__(self, rprob, host=None, dport=None, sport=49512):
         """Class constructor."""
         self.sport = sport  # Source port, defaults to 49512
         self.dport = dport  # Destination port
         self.dst = host  # Destination host
+        self.rprob = rprob
         self.rtcp = RstegTcp(self.sport, rprob)  # Rsteg_Tcp instance
         self.f_index = 0
         # Flags
@@ -26,8 +27,8 @@ class RstegSocket:
         self.rtcp.sport = self.sport
 
     def listen(self):
-        """Starts the RestegTCP module."""
-        self.rtcp.restart(self.sport)
+        """Starts the RstegTCP module."""
+        self.rtcp.restart(self.rprob, self.sport)
         self.rtcp.start()
         self.listening = True
 

@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 class RstegTcp:
 
-    def __init__(self, sport, rprob=0.07):
+    def __init__(self, sport, rprob):
         """Class constructor.
         :param sport: Source port number.
         """
@@ -64,7 +64,7 @@ class RstegTcp:
         self.listen_thread = threading.Thread(target=self.listen)
         self.listen_thread.start()
 
-    def restart(self, sport):
+    def restart(self, rprob, sport):
         """Restarts all class properties to their initial state."""
         self.listen_thread = None  # Listener thread for incoming packets
         self.sport = sport  # Source port
@@ -79,7 +79,7 @@ class RstegTcp:
         self.ingress_buffer = b''  # Buffer for ingress binary data
         self.transfer_end = False
         # RSTEG properties
-        self.retrans_prob = 0.07  # Probability for fake retransmission
+        self.retrans_prob = rprob  # Probability for fake retransmission
         self.secret_sent = False  # Flag for secret delivery (client side)
         self.secret_wait = False  # Flag for secret delivery (server side)
         self.secret_signal = False  # Flag for secret delivery signal

@@ -20,13 +20,18 @@ if __name__ == '__main__':
     # If flag is true the server will wait for a one-way transfer and it won't pull data until the stream is closed.
     wait_flag = False
 
-    s = RstegSocket(sport=80)
+    s = RstegSocket(sport=80, rprob=0)
     s.listen()
     print('TCP Rsteg Socket listening on port 80.')
     s.accept()
     print('Connection accepted.')
     if wait_flag:
-        d = s.wait_and_recv()
+        while True:
+            d = s.wait_and_recv()
+            print("Connection closed.")
+            s.listen()
+            s.accept()
+            print('Connection accepted.')
     else:
         data = b''
         while True:

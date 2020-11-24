@@ -118,7 +118,7 @@ def tcp_transfer(host, sport, dport, data, secret_data, rprob):
     secret = open(secret_data, 'rb').read()
     print('Opening TCP stream at ' + host + ':' + dport)
     window.refresh()
-    s = RstegSocket(int(sport), float(rprob))
+    s = RstegSocket(float(rprob), sport=int(sport))
     s.connect(host, int(dport))
     print('Connection established.')
     window.refresh()
