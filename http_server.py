@@ -13,7 +13,7 @@ class HttpServer:
     """A simple HTTP Server using RstegSocket."""
     def __init__(self, port):
         """Constructor"""
-        self.s = RstegSocket(sport=port)
+        self.s = RstegSocket(0.07, sport=port)
         self.s.bind('', port)
 
         # Load in memory the html responses
