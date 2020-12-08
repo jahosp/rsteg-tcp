@@ -96,7 +96,7 @@ def rpost(host, path, data, secret_data, rprob):
     print('Sending POST ' + path + ' HTTP/1.1 request to ' + host)
     print('Using RSTEG to send secret.')
     window.refresh()
-    c = HttpClient(49512, rprob)
+    c = HttpClient(float(rprob), 49512)
     req = c.create_post_request(host, path, cover, 'image/jpg')
     res = c.rsteg_request(bytes(req), secret, host)
     print('Response: ' + res.split(b'\r\n')[0].decode())

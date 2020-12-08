@@ -11,9 +11,9 @@ logger = logging.getLogger(__name__)
 
 class HttpServer:
     """A simple HTTP Server using RstegSocket."""
-    def __init__(self, port):
+    def __init__(self, port, rprob=0.07):
         """Constructor"""
-        self.s = RstegSocket(0.07, sport=port)
+        self.s = RstegSocket(rprob=rprob, sport=port)
         self.s.bind('', port)
 
         # Load in memory the html responses
