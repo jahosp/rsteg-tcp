@@ -30,7 +30,7 @@ two methods for data transfer(send() and rsend()). One would be the usual socket
 parameters, the cover data and the secret data. Finally, ```http_server.py``` and ```http_client.py``` utilise the RstegSocket methods
 to send and receive HTTP requests and responses. 
 
-**NOTE: This are not full implementations of TCP or HTTP and they're far from it.**
+**NOTE: These are NOT full implementations of TCP or HTTP and they are far from it.**
 
 ## Usage
 First of all, the ```client.py``` script contains the client application and its GUI. You can use ```http_server.py``` 
