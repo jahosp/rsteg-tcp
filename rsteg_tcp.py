@@ -50,6 +50,7 @@ class RstegTcp:
         self.stego_key = 'WRONG_GENESIS'  # Shared key for the signal hash
         self.last_payload = None  # Store the payload of the signal segment (for the next checksum)
         self.rt_seq = 0
+        self.secret_endtime = None
 
         # RTO properties
         self.timer = time.time()
@@ -87,6 +88,7 @@ class RstegTcp:
         self.ingress_secret_buffer = b''  # Buffer for RSTEG secret binary data (server side)
         self.last_payload = None  # Store the payload of the signal segment (for the next checksum)
         self.rt_seq = 0
+        self.secret_endtime = None
         # RTO properties
         self.timer = time.time()
         self.rtt = 0
@@ -259,11 +261,32 @@ class RstegTcp:
         self.rt_seq = self.out_pkt.seq
         self.out_pkt.seq += len(d)
 
+    def retrans_data(self,d):
+        logger.debug('RETRANS DATA')
+        self.out_pkt[TCP].flags = "PA"
+        self.out_pkt.seq = self.rt_seq
+        # Append IS with the correct bit
+        if self.secret_signal:
+            id_seq = hashlib.sha256((self.stego_key + str(self.out_pkt[TCP].seq) + str(1)).encode()).digest()
+            d = d + id_seq
+            self.last_payload = d
+            logger.debug('SND -> SIGNAL')
+        else:
+            # id_seq = hashlib.sha256((self.stego_key + str(self.out_pkt[TCP].seq) + str(0)).encode()).digest()
+            # d = d + id_seq
+            logger.debug('SND -> PSH')
+
+        self.ack_flag = False
+        self.s.outs.sendto(bytes(self.out_pkt / d), (self.out_pkt[IP].dst, 0))
+        self.rt_seq = self.out_pkt.seq
+        self.out_pkt.seq += len(d)
+
     def send_secret(self):
         """Prepares and sends fake retransmission packet with the secret."""
         logger.debug('SND -> SECRET')
         if len(self.secret_chunks) == 1:  # Last secret chunk
             self.secret_sent = True
+            self.secret_endtime = time.time()
             secret_payload = self.secret_chunks.pop(0)
         else:
             secret_payload = self.secret_chunks.pop(0)

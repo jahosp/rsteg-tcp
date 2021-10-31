@@ -52,12 +52,44 @@ class RstegSocket:
         # Slice the binary data in chunks the size of the payload length
         for n in range(0, len(data), interval):
             data_chunks.append(data[n:n + interval])
+
+        # RTO vars
+        k = 4
+        g = 0.05
+        srtt = 0
+        rttvar = 0
+        rto = 1
+        alpha = 1/8
+        beta = 1/4
+        first_measurement = True
+
         # Send chunks
         for chunk in data_chunks:
             self.rtcp.send_data(chunk)
-            # Wait for ack event
-            self.rtcp.ack_event.wait()
-            self.rtcp.ack_event.clear()
+            # set timer
+            rtt = time.time()
+            res = False
+            # while we don't receive ACK
+            while not res:
+                #print(rto)
+                # Wait for ack event or timeout
+                res = self.rtcp.ack_event.wait(timeout=rto)
+                if not res:  #timeout
+                    self.rtcp.retrans_data(chunk)
+                else:  #ack received
+                    self.rtcp.ack_event.clear()
+                    if first_measurement:
+                        srtt = time.time() - rtt
+                        rttvar = srtt/2
+                        rto = srtt + max(g, int(k*rttvar))
+                        first_measurement = False
+                    else:
+                        rttvar = (1- beta) * rttvar + beta * abs(srtt - (time.time() - rtt))
+                        srtt = (1 - alpha) * srtt + alpha * (time.time() - rtt)
+                        rto = srtt + max(g, k*rttvar)
+
+
+
 
     def rsend(self, cover, secret):
         """Chunks the data and the secret according to the MSS. The data and secret will be sent to the
@@ -75,6 +107,16 @@ class RstegSocket:
         n = 0
         start_time = time.time()
 
+        # RTO vars
+        k = 4
+        g = 0.05
+        srtt = 0
+        rttvar = 0
+        rto = 1
+        alpha = 1/8
+        beta = 1/4
+        first_measurement = True
+
         # Send cover
         while len(cover) > 0:
             # Send cover signal and secret
@@ -82,36 +124,76 @@ class RstegSocket:
                 chunk = cover[:1414]
                 cover = cover[1414:]
                 self.rtcp.send_data(chunk)  # data with signal
-                timer = time.time()
-                while not self.rtcp.ack_flag:
-                    if (time.time() - timer) > 0.008:
+                rtt = time.time()
+                res = False
+                while not res:
+                    #print(rto)
+                    res = self.rtcp.ack_event.wait(timeout=rto)
+                    if not res:  # timeout as expected
                         self.rtcp.send_secret()
                         n += 1
-                        self.rtcp.ack_event.wait()
-                        self.rtcp.ack_event.clear()  # clear ack event
+                    else:
+                        self.rtcp.ack_event.clear()
+                        if first_measurement:
+                            srtt = time.time() - rtt
+                            rttvar = srtt / 2
+                            rto = srtt + max(g, int(k * rttvar))
+                            first_measurement = False
+                        else:
+                            rttvar = (1 - beta) * rttvar + beta * abs(srtt - (time.time() - rtt))
+                            srtt = (1 - alpha) * srtt + alpha * (time.time() - rtt)
+                            rto = srtt + max(g, k * rttvar)
+
             # Send cover
             else:
                 chunk = cover[:1446]
                 cover = cover[1446:]
                 self.rtcp.send_data(chunk)  # data without signal
-                self.rtcp.ack_event.wait()  # wait for ack event
-                self.rtcp.ack_event.clear()  # clear ack event
+                # set timer
+                rtt = time.time()
+                res = False
+                # while we don't receive ACK
+                while not res:
+                    #print(rto)
+                    # Wait for ack event or timeout
+                    res = self.rtcp.ack_event.wait(timeout=rto)
+                    if not res:  # timeout
+                        self.rtcp.retrans_data(chunk)
+                    else:  # ack received
+                        self.rtcp.ack_event.clear()
+                        if first_measurement:
+                            srtt = time.time() - rtt
+                            rttvar = srtt / 2
+                            rto = srtt + max(g, int(k * rttvar))
+                            first_measurement = False
+                        else:
+                            rttvar = (1 - beta) * rttvar + beta * abs(srtt - (time.time() - rtt))
+                            srtt = (1 - alpha) * srtt + alpha * (time.time() - rtt)
+                            rto = srtt + max(g, k * rttvar)
+
+
 
             # Update secret_signal flag according to the retrans_prob except if the secret has been sent.
             if not self.rtcp.secret_sent:
                 self.rtcp.secret_signal = retrans_prob(self.rtcp.retrans_prob)
             else:
                 self.rtcp.secret_signal = False
+                break
 
+
+        #print('# Cover Transfer time: %.2f' % round(time.time() - start_time, 2))
+        cover_time = round(time.time() - start_time, 2)
         if self.rtcp.secret_sent:
-            print('Secret successfully delivered.')
+            #print('Secret successfully delivered.')
+            #print('# Secret Transfer time: %.2f' % round(self.rtcp.secret_endtime - start_time, 2))
+            secret_time = round(self.rtcp.secret_endtime - start_time, 2)
         else:
-            print('# Cover data ended before delivering all the secret!')
-            print('# Delivered ' + str(n * 1444) + ' secret bytes')
+            #print('# Cover data ended before delivering all the secret!')
+            #print('# Delivered ' + str(n * 1444) + ' secret bytes')
+            secret_time = cover_time
 
-        print('# Transfer time: %.2f' % round(time.time() - start_time, 2))
 
-        return n * 1444
+        return cover_time, secret_time
 
     def recv(self, size, timeout=0):
         """Reads the RstegTCP data buffer for new recv data.

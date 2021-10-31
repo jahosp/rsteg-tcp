@@ -29,6 +29,7 @@ if __name__ == '__main__':
         while True:
             d = s.wait_and_recv()
             print("Connection closed.")
+            print(s.rtcp.ingress_buffer)
             s.listen()
             s.accept()
             print('Connection accepted.')
