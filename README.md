@@ -4,9 +4,9 @@
 This project is a proof of concept of a steganographic method called retransmission steganography (RSTEG), proposed
 by W. Mazurczyk, M. Smolarczyk and K. Szczypiorski in the [following article.]( https://doi.org/10.1007/s00500-009-0530-1 )
 It's written in Python 3.8 and uses the [Scapy](https://scapy.readthedocs.io/en/latest/) library to forge packets, as well to manage the layer 3 RawSockets. 
-In addition, the client application uses the [PySimpleGUI](https://pysimplegui.readthedocs.io/en/latest/) wrapper for its UI and [Matplotlib](https://github.com/matplotlib/matplotlib) for generating graphics.
+In addition, the client application uses the [PySimpleGUI](https://pysimplegui.readthedocs.io/en/latest/) wrapper for its UI.
 
-This is being developed as part of my final project to obtain a BD in Computer Engineering with a specialization in Information Technologies by the UAB. 
+This was developed as part of the final project to obtain my BD in Computer Engineering.
 
 ## Description 
 In general, RSTEG can be applied to any network protocol that utilises a retransmission mechanism. For this project the TCP was selected due to its predominance over the Internet. Summarizing, the method consists in:
@@ -30,7 +30,7 @@ two methods for data transfer(send() and rsend()). One would be the usual socket
 parameters, the cover data and the secret data. Finally, ```http_server.py``` and ```http_client.py``` utilise the RstegSocket methods
 to send and receive HTTP requests and responses. 
 
-**NOTE: This are not full implementations of TCP or HTTP and they're far from it.**
+**NOTE: These are NOT full implementations of TCP or HTTP and they are far from it.**
 
 ## Usage
 First of all, the ```client.py``` script contains the client application and its GUI. You can use ```http_server.py``` 
@@ -50,8 +50,7 @@ The HTTP server only accepts GET and POST requests on the root and /upload paths
 
 #### TCP
 For TCP you'll have to input the server IP, the server port, and the source port. In the same way as in the POST request,
-here you can browse for the cover and secret data. Also you can edit the retransmission probability. After the stream is closed
-the client will show a Matplotlib figure that plots the data transfered, both as cover and in secret. 
+here you can browse for the cover and secret data. Also you can edit the retransmission probability.
 
 <p float=left>
  <img  height="400" src="https://user-images.githubusercontent.com/15250664/98666040-be2c6800-234c-11eb-9039-966bfe37a8e5.png">
